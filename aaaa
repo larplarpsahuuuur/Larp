@@ -104,10 +104,6 @@ local function clamp01(x) return math.clamp(x, 0, 1) end
 local function contrast(c)
     return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) > 0.68 and rgb(16, 16, 20) or WHITE
 end
-local function hueShift(c, d)
-    local h, s, v = c:ToHSV()
-    return Color3.fromHSV((h + d) % 1, s, math.max(v, 0.55))
-end
 local function textHeight(str, size, width)
     local ok, v = pcall(TextService.GetTextSize, TextService, str, size, Enum.Font.GothamMedium, Vector2.new(width, 10000))
     return ok and v.Y or size + 4
@@ -204,12 +200,12 @@ local AccentHooks = {}
 local function accent() return State.Accent end
 local function onAccent(fn) AccentHooks[#AccentHooks + 1] = fn fn(State.Accent) end
 
--- ガラスの種類 (tint = 地の色の透けぐあい / blob = 奥の光の透けぐあい / shade = 下の暗がり / sheen = 上のつや)
+-- ガラスの種類 (tint = 地の色の透けぐあい / shade = 下の暗がり / sheen = 上のつや)
 local GLASS = {
-    Frosted = { tint = 0.16, blob = 0.7, shade = 0.45, sheen = 0.92 },
-    Clear = { tint = 0.5, blob = 0.62, shade = 0.7, sheen = 0.86 },
-    Dark = { tint = 0.03, blob = 0.88, shade = 0.6, sheen = 0.96 },
-    Tint = { tint = 0.24, blob = 0.62, shade = 0.45, sheen = 0.9, colored = true },
+    Frosted = { tint = 0.14, shade = 0.55, sheen = 0.93 },
+    Clear = { tint = 0.42, shade = 0.75, sheen = 0.88 },
+    Dark = { tint = 0.02, shade = 0.7, sheen = 0.96 },
+    Tint = { tint = 0.2, shade = 0.55, sheen = 0.92, colored = true },
 }
 Lib.GlassStyles = { "Frosted", "Clear", "Dark", "Tint" }
 
@@ -219,14 +215,6 @@ local function applyGlassOne(o, instant)
     local t = instant and 0 or 0.5
     local col = g.colored and State.Accent:Lerp(BLACK, 0.74) or C.Base
     tween(o.tint, { BackgroundTransparency = g.tint, BackgroundColor3 = col }, t)
-    local per = g.blob ^ (1 / 6)
-    for _, b in ipairs(o.blobs) do
-        local c = hueShift(State.Accent, b.hue)
-        for _, l in ipairs(b.layers) do
-            l.BackgroundColor3 = c
-            tween(l, { BackgroundTransparency = per }, t)
-        end
-    end
     tween(o.shade, { BackgroundTransparency = g.shade }, t)
     local gr = o.sheen:FindFirstChildOfClass("UIGradient")
     if gr then gr.Transparency = NumberSequence.new(g.sheen, 1) end
@@ -247,78 +235,25 @@ local function setAccent(a)
     applyGlass()
 end
 
--- すりガラス: 角を丸めた CanvasGroup に、地の色・流れる光・下の暗がり・上のつや を重ねる
+-- すりガラス: 角を丸めた CanvasGroup に、地の色・下の暗がり・上のつや を重ねるだけ (静かで、うるさくない)
 -- (中身の文字はこの外に置くので、にじまない)
-local function blob(g, x, y, size, hue, layersN)
-    local holder = new("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(x, y), Size = UDim2.fromScale(size, size),
-        BackgroundTransparency = 1, ZIndex = 2, Parent = g,
-    })
-    new("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Width, Parent = holder })
-    local layers = {}
-    for k = 1, layersN do
-        local f = new("Frame", {
-            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromScale(1 - (k - 1) * (0.65 / layersN), 1 - (k - 1) * (0.65 / layersN)),
-            BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2, Parent = holder,
-        })
-        corner(f, UDim.new(1, 0))
-        layers[k] = f
-    end
-    return { holder = holder, layers = layers, bx = x, by = y, hue = hue, ph = math.random() * 6 }
-end
-
 local function glass(parent, radius, opts)
     opts = opts or {}
     local g = new("CanvasGroup", { Name = "Glass", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 0, Parent = parent })
     corner(g, radius)
     local tint = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Base, BorderSizePixel = 0, ZIndex = 1, Parent = g })
-    local blobs = {}
-    if opts.blobs ~= false then
-        blobs[1] = blob(g, 0.12, 0.08, 0.85, 0, 6)
-        blobs[2] = blob(g, 0.9, 0.4, 0.7, 0.11, 6)
-        blobs[3] = blob(g, 0.42, 1.0, 0.75, -0.09, 6)
-    end
-    -- マウスの所がほんのり明るくなる (液体のガラスに光が映る)
-    local light
-    if opts.light then
-        light = blob(g, 0.5, 0.5, 0.55, 0, 5)
-        for _, l in ipairs(light.layers) do l.BackgroundColor3 = WHITE l.BackgroundTransparency = 0.975 end
-        light.sx, light.sy = spring(0.5, 6, 1), spring(0.5, 6, 1)
-    end
     local shade = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BorderSizePixel = 0, ZIndex = 3, Parent = g })
     new("UIGradient", { Transparency = NumberSequence.new(1, 0), Rotation = 90, Parent = shade })
-    local sheen = new("Frame", { Size = UDim2.new(1, 0, 0.5, 0), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 4, Parent = g })
+    local sheen = new("Frame", { Size = UDim2.new(1, 0, 0, 90), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 4, Parent = g })
     new("UIGradient", { Transparency = NumberSequence.new(0.9, 1), Rotation = 90, Parent = sheen })
     -- 縁の線は外側の枠に付けるので、外側も同じだけ角を丸める
     if not parent:FindFirstChildOfClass("UICorner") then corner(parent, radius) end
-    local st = gstroke(parent, 0.8, 0.15, 0.85)
-    local o = { group = g, tint = tint, blobs = blobs, light = light, shade = shade, sheen = sheen, stroke = st }
+    local st = gstroke(parent, 0.8, 0.2, 0.9)
+    local o = { group = g, tint = tint, shade = shade, sheen = sheen, stroke = st }
     Glasses[o] = true
     applyGlassOne(o, true)
     return o
 end
-
--- 光をゆっくり流す / マウスの光を追わせる
-onStep(function()
-    local t = os.clock()
-    local m
-    for o in pairs(Glasses) do
-        for _, b in ipairs(o.blobs) do
-            b.holder.Position = UDim2.fromScale(b.bx + math.sin(t * 0.17 + b.ph) * 0.09, b.by + math.cos(t * 0.13 + b.ph * 1.3) * 0.08)
-        end
-        local L = o.light
-        if L then
-            m = m or UserInputService:GetMouseLocation()
-            local ap, as = o.group.AbsolutePosition, o.group.AbsoluteSize
-            if as.X > 0 then
-                L.sx.t = math.clamp((m.X - ap.X) / as.X, -0.2, 1.2)
-                L.sy.t = math.clamp((m.Y - ap.Y) / as.Y, -0.2, 1.2)
-            end
-            L.holder.Position = UDim2.fromScale(L.sx.x, L.sy.x)
-        end
-    end
-end)
 
 -- 浮いた影: やわらかい影を重ねる (止める関数を返す)
 local function softShadow(parent, radius, getAlpha)
@@ -346,7 +281,7 @@ local function pop(holder, opts)
     local sc = new("UIScale", { Parent = holder })
     local s = spring(0, opts.speed or 26, opts.damp or 0.88)
     local base = holder.Position
-    local p = { holder = holder, body = body, spring = s, open = false }
+    local p = { holder = holder, body = body, spring = s, open = false, dy = opts.dy or 10, dx = opts.dx or 0 }
     function p:Set(open) self.open = open s.t = open and 1 or 0 end
     function p:Snap(open) self:Set(open) s.x, s.v = s.t, 0 end
     holder.Visible = false
@@ -357,7 +292,7 @@ local function pop(holder, opts)
         if not holder.Visible then return end
         local from = opts.from or 0.96
         sc.Scale = from + (1 - from) * x
-        holder.Position = base + UDim2.fromOffset(0, (opts.dy or 10) * (1 - x))
+        holder.Position = base + UDim2.fromOffset(p.dx * (1 - x), p.dy * (1 - x))
         if s.t == 1 and xc >= 0.999 then
             if body.Parent ~= holder then body.Parent = holder end
         else
@@ -555,10 +490,10 @@ function Element:SetLocked(on, reason)
     if not self._lock then
         local H0 = self._H0 or 40
         local ov = new("TextButton", {
-            Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(8, 8, 10), BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(4, 1), Size = UDim2.new(1, -8, 1, -2), BackgroundColor3 = rgb(8, 8, 10), BackgroundTransparency = 1,
             Text = "", AutoButtonColor = false, ZIndex = 20, Visible = false, Parent = self.Row,
         })
-        corner(ov, 14)
+        corner(ov, 12)
         local ic = new("ImageLabel", {
             AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0, H0 / 2), Size = UDim2.fromOffset(14, 14),
             BackgroundTransparency = 1, ImageColor3 = C.Sub, ZIndex = 21, Parent = ov,
@@ -590,7 +525,41 @@ local function newContainer(W, page, list, extra)
     for k, v in pairs(extra or {}) do c[k] = v end
     return c
 end
-function Container:_next() self.Order += 1 return self.Order end
+-- 並び順はページ全体で 1 本 (グループを後から足しても混ざらない)
+function Container:_next()
+    self.Page.order = (self.Page.order or 0) + 1
+    return self.Page.order
+end
+-- 今のカード (iOS の設定のように、行は 1 枚のカードにまとめて細い線で区切る)
+function Container:_newCard()
+    local f = new("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = WHITE,
+        BackgroundTransparency = 0.955, LayoutOrder = self:_next(), Parent = self.List,
+    })
+    corner(f, 16)
+    gstroke(f, 0.88, 0.45, 0.97)
+    new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = f })
+    new("UIPadding", { PaddingTop = UDim.new(0, 3), PaddingBottom = UDim.new(0, 3), Parent = f })
+    self.Card = { frame = f, n = 0, items = {} }
+    table.insert(self.Page.cards, self.Card)
+    return self.Card
+end
+function Container:_card() return self.Card or self:_newCard() end
+-- カードに 1 行足す (2 行目からは上に細い線)
+function Container:_cardRow(height, indent, auto)
+    local card = self:_card()
+    card.n += 1
+    local r = new("Frame", {
+        Size = UDim2.new(1, 0, 0, height or 40), AutomaticSize = auto and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
+        BackgroundTransparency = 1, LayoutOrder = card.n, Parent = card.frame,
+    })
+    local hl = new("Frame", { Position = UDim2.fromOffset(4, 1), Size = UDim2.new(1, -8, 1, -2), BackgroundColor3 = WHITE, BackgroundTransparency = 1, ZIndex = 1, Parent = r })
+    corner(hl, 12)
+    if card.n > 1 then
+        new("Frame", { Position = UDim2.fromOffset(indent or 14, 0), Size = UDim2.new(1, -(indent or 14) - 14, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 2, Parent = r })
+    end
+    return r, hl, card
+end
 
 -- ツールチップ
 local function attachTip(W, obj, str)
@@ -616,14 +585,11 @@ local function baseRow(cont, o, opts)
     local H0
     if opts.stacked then H0 = hasDesc and 48 or 36 else H0 = hasDesc and 50 or 40 end
     local height = opts.stacked and (H0 + (opts.extra or 0)) or H0
-    local r = new("Frame", {
-        Name = tostring(o.Name or "Row"), Size = UDim2.new(1, 0, 0, height), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955,
-        LayoutOrder = cont:_next(), ClipsDescendants = opts.clip or false, Parent = cont.List,
-    })
-    corner(r, 14)
-    gstroke(r, 0.86, 0.5, 0.95)
-    r.MouseEnter:Connect(function() tween(r, { BackgroundTransparency = 0.935 }, 0.15) end)
-    r.MouseLeave:Connect(function() tween(r, { BackgroundTransparency = 0.955 }, 0.2) end)
+    local r, hl, card = cont:_cardRow(height, o.Icon and 46 or 14)
+    r.Name = tostring(o.Name or "Row")
+    r.ClipsDescendants = opts.clip or false
+    r.MouseEnter:Connect(function() tween(hl, { BackgroundTransparency = 0.965 }, 0.15) end)
+    r.MouseLeave:Connect(function() tween(hl, { BackgroundTransparency = 1 }, 0.25) end)
 
     local x = 14
     if o.Icon then
@@ -650,7 +616,7 @@ local function baseRow(cont, o, opts)
     else
         title = text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(scale, -x - reserve, 0, H0), Text = tostring(o.Name or ""), FontFace = F.Bold, TextSize = 13, ZIndex = 2, Parent = r })
     end
-    return { row = r, title = title, desc = desc, H0 = H0, x = x }
+    return { row = r, hl = hl, card = card, title = title, desc = desc, H0 = H0, x = x }
 end
 
 local function newElement(cont, o, R, kind)
@@ -661,6 +627,7 @@ local function newElement(cont, o, R, kind)
     }, Element)
     e._item = { frame = R.row, text = string.lower(tostring(o.Name or o.Text or o.Title or "") .. " " .. tostring(o.Desc or "")), visible = true }
     table.insert(cont.Page.items, e._item)
+    if R.card then table.insert(R.card.items, e._item) end
     if o.Flag then Lib.Flags[o.Flag] = e W.Flags[o.Flag] = e end
     if o.Tooltip then attachTip(W, R.row, o.Tooltip) end
     if o.Locked then e:SetLocked(true, o.LockedReason) end
@@ -699,7 +666,8 @@ end
 -- ---- 見出し ----
 function Container:CreateSection(o)
     if type(o) ~= "table" then o = { Name = o } end
-    local f = new("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, LayoutOrder = self:_next(), Parent = self.List })
+    self.Card = nil -- 次の要素から新しいカード
+    local f = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, LayoutOrder = self:_next(), Parent = self.List })
     local x = 6
     if o.Icon then
         local ic = new("ImageLabel", { Position = UDim2.fromOffset(6, 13), Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, ImageColor3 = C.Muted, Parent = f })
@@ -707,6 +675,7 @@ function Container:CreateSection(o)
         x = 23
     end
     local lb = text({ Position = UDim2.fromOffset(x, 6), Size = UDim2.new(1, -x, 0, 20), Text = string.upper(tostring(o.Name or "")), FontFace = F.Heavy, TextSize = 10, TextColor3 = C.Muted, TextYAlignment = Enum.TextYAlignment.Bottom, Parent = f })
+    if o.Icon then f:FindFirstChildOfClass("ImageLabel").Position = UDim2.fromOffset(6, 14) end
     table.insert(self.Page.sections, f)
     return { Frame = f, Set = function(_, t) lb.Text = string.upper(tostring(t)) end }
 end
@@ -728,10 +697,10 @@ function Container:CreateButton(o)
         chev.ImageColor3 = C.Error
     end
     local hit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = R.row })
-    bounce(hit, R.row, 1.006, 30, 0.86, 0.975)
+    bounce(hit, R.hl, 1, 30, 0.86, 0.97)
     hit.MouseButton1Click:Connect(function()
-        R.row.BackgroundTransparency = 0.86
-        tween(R.row, { BackgroundTransparency = 0.935 }, 0.45)
+        R.hl.BackgroundTransparency = 0.88
+        tween(R.hl, { BackgroundTransparency = 0.965 }, 0.5)
         e:_fire()
     end)
     function e:Fire() self:_fire() end
@@ -1378,14 +1347,13 @@ end
 -- ---- 文章 ----
 function Container:CreateParagraph(o)
     if type(o) ~= "table" then o = { Content = o } end
-    local r = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, LayoutOrder = self:_next(), Parent = self.List })
-    corner(r, 14)
-    gstroke(r, 0.86, 0.5, 0.95)
-    new("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 11), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = r })
-    new("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = r })
-    local title = text({ Size = UDim2.new(1, 0, 0, 18), Text = tostring(o.Title or ""), FontFace = F.Bold, TextSize = 13, LayoutOrder = 1, Visible = (o.Title or "") ~= "", Parent = r })
-    local body = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = tostring(o.Content or ""), TextSize = 12, TextColor3 = C.Sub, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, TextYAlignment = Enum.TextYAlignment.Top, LayoutOrder = 2, Parent = r })
-    local e = newElement(self, { Name = (o.Title or "") .. " " .. (o.Content or "") }, { row = r, H0 = 40 }, "Paragraph")
+    local r, _, card = self:_cardRow(0, 14, true)
+    local inner = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 2, Parent = r })
+    new("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 11), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = inner })
+    new("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = inner })
+    local title = text({ Size = UDim2.new(1, 0, 0, 18), Text = tostring(o.Title or ""), FontFace = F.Bold, TextSize = 13, LayoutOrder = 1, Visible = (o.Title or "") ~= "", ZIndex = 2, Parent = inner })
+    local body = text({ Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = tostring(o.Content or ""), TextSize = 12, TextColor3 = C.Sub, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, TextYAlignment = Enum.TextYAlignment.Top, LayoutOrder = 2, ZIndex = 2, Parent = inner })
+    local e = newElement(self, { Name = (o.Title or "") .. " " .. (o.Content or "") }, { row = r, card = card, H0 = 40 }, "Paragraph")
     function e:Set(a)
         if type(a) == "table" then
             if a.Title then title.Text = a.Title title.Visible = a.Title ~= "" end
@@ -1402,16 +1370,14 @@ function Container:CreateLabel(a, icon, color)
     local o = type(a) == "table" and a or { Text = a, Icon = icon, Color = color }
     if o.Icon == 0 then o.Icon = nil end
     local W = self.Window
-    local r = new("Frame", { Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 0.975, LayoutOrder = self:_next(), Parent = self.List })
-    corner(r, 12)
-    local x = 14
+    local x = o.Icon and 38 or 14
+    local r, _, card = self:_cardRow(36, x)
     if o.Icon then
-        local ic = new("ImageLabel", { Position = UDim2.fromOffset(13, 9), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, ImageColor3 = o.Color or C.Sub, Parent = r })
+        local ic = new("ImageLabel", { Position = UDim2.fromOffset(15, 11), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, ImageColor3 = o.Color or C.Sub, ZIndex = 2, Parent = r })
         setIcon(ic, o.Icon)
-        x = 36
     end
-    local lb = text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(1, -x - 10, 1, 0), Text = tostring(o.Text or ""), TextSize = 12, TextColor3 = o.Color or C.Sub, Parent = r })
-    local e = newElement(self, { Name = o.Text }, { row = r, H0 = 32 }, "Label")
+    local lb = text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(1, -x - 12, 1, 0), Text = tostring(o.Text or ""), TextSize = 12, TextColor3 = o.Color or C.Sub, ZIndex = 2, Parent = r })
+    local e = newElement(self, { Name = o.Text }, { row = r, card = card, H0 = 36 }, "Label")
     function e:Set(t, c)
         lb.Text = tostring(t)
         if c then lb.TextColor3 = c end
@@ -1428,46 +1394,21 @@ function Container:CreateLabel(a, icon, color)
     return e
 end
 
--- ---- 区切り線 ----
+-- ---- 区切り (カードをここで切って、次から新しいカード) ----
 function Container:CreateDivider()
-    local f = new("Frame", { Size = UDim2.new(1, 0, 0, 9), BackgroundTransparency = 1, LayoutOrder = self:_next(), Parent = self.List })
-    new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -24, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.9, BorderSizePixel = 0, Parent = f })
-    return f
+    self.Card = nil
+    return new("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundTransparency = 1, LayoutOrder = self:_next(), Parent = self.List })
 end
 
--- ---- 2 列のグループ ----
+-- ---- グループ (見出し付きの 1 枚のカード。Side は使わない) ----
 function Container:CreateGroupbox(o)
     if type(o) ~= "table" then o = { Name = o } end
-    local page = self.Page
-    local cols = page.cols
-    if self.IsGroup or not cols or page.colsOrder ~= self.Order then
-        local f = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = self:_next(), Parent = self.List })
-        local function col(x)
-            local c = new("Frame", { Position = UDim2.new(x, x == 0 and 0 or 4, 0, 0), Size = UDim2.new(0.5, -4, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = f })
-            new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = c })
-            return c
-        end
-        cols = { Left = col(0), Right = col(0.5), n = 0 }
-        if not self.IsGroup then page.cols, page.colsOrder = cols, self.Order end
-    end
-    local side = (o.Side == "Right" or o.Side == 2) and "Right" or "Left"
-    cols.n += 1
-    local box = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = WHITE, BackgroundTransparency = 0.975, LayoutOrder = cols.n, Parent = cols[side] })
-    corner(box, 16)
-    gstroke(box, 0.88, 0.4, 0.95)
-    new("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 8), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = box })
-    new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = box })
-    local head = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, LayoutOrder = 0, Parent = box })
-    local x = 6
-    if o.Icon then
-        local ic = new("ImageLabel", { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(13, 13), BackgroundTransparency = 1, ImageColor3 = C.Sub, Parent = head })
-        setIcon(ic, o.Icon)
-        x = 25
-    end
-    text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(1, -x, 1, 0), Text = string.upper(tostring(o.Name or "")), FontFace = F.Heavy, TextSize = 10, TextColor3 = C.Sub, Parent = head })
-    return newContainer(self.Window, page, box, { IsGroup = true, Order = 0 })
+    self.Card = nil -- この後にタブへ足す要素は、グループの下の新しいカードへ
+    local g = newContainer(self.Window, self.Page, self.List, { IsGroup = true })
+    g:CreateSection(o)
+    g:_newCard()
+    return g
 end
-
 function Container:Select() if self.IsTab then self.Window:SelectTab(self) end end
 
 -- ===================================================================
@@ -1670,110 +1611,82 @@ function Lib:CreateWindow(o)
     if not Gui.Parent then Gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
     W.Gui = Gui
 
-    local SW, SH = 680, 450
-    if typeof(o.Size) == "UDim2" then SW, SH = o.Size.X.Offset, o.Size.Y.Offset elseif typeof(o.Size) == "Vector2" then SW, SH = o.Size.X, o.Size.Y end
-    local SIDE = o.SidebarWidth or 178
+    -- 形: 左に浮いた黒いカプセル (タブ) と、右に 1 枚のすりガラスのシート
+    --   シートの高さは中身に合わせてバネで伸び縮みする (MinHeight 〜 Size の高さ)
+    local ORN, ORN_OPEN, GAP = 52, 164, 10
+    local SW, MAXH = 420, 500
+    if typeof(o.Size) == "UDim2" then SW, MAXH = o.Size.X.Offset, o.Size.Y.Offset elseif typeof(o.Size) == "Vector2" then SW, MAXH = o.Size.X, o.Size.Y end
+    local MINH = math.min(o.MinHeight or 240, MAXH)
+    local RW = ORN + GAP + SW
 
-    local Root = new("Frame", { Name = "Root", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(SW, SH), BackgroundTransparency = 1, Parent = Gui })
+    local Root = new("Frame", { Name = "Root", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(RW, MAXH), BackgroundTransparency = 1, Parent = Gui })
     local RootScale = new("UIScale", { Parent = Root })
     W.Root, W.RootScale = Root, RootScale
     function W:_fit()
         local cam = workspace.CurrentCamera
         local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-        return math.min(1, (vp.X - 24) / SW, (vp.Y - 24) / SH)
+        return math.min(1, (vp.X - 24) / RW, (vp.Y - 24) / MAXH)
     end
     RootScale.Scale = SCALES[W.ScaleIndex] * W:_fit()
     local posX, posY = spring(0, 26, 0.9), spring(0, 26, 0.9)
     onStep(function() Root.Position = UDim2.new(0.5, math.floor(posX.x + 0.5), 0.5, math.floor(posY.x + 0.5)) end)
 
+    local sh = spring(MINH, 16, 0.92)      -- シートの高さ
+    local ow = spring(ORN, 24, 0.86)       -- カプセルの幅 (乗せると広がる)
+    W.OrnH = 8
+
+    -- 影は開閉の CanvasGroup の外に置く (中だと切り取られる)
     local holder = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = Root })
-    local WinPop = pop(holder, { from = 0.92, dy = 18, speed = 18, damp = 0.84 })
+    local WinPop = pop(holder, { from = 0.94, dy = 16, speed = 18, damp = 0.84 })
     W.Pop = WinPop
-    softShadow(Root, 24, function() return WinPop.spring.x end)
+    local sheetShade = new("Frame", { Position = UDim2.fromOffset(ORN + GAP, 0), Size = UDim2.fromOffset(SW, MINH), BackgroundTransparency = 1, ZIndex = 0, Parent = Root })
+    local ornShade = new("Frame", { Size = UDim2.fromOffset(ORN, 8), BackgroundTransparency = 1, ZIndex = 0, Parent = Root })
+    softShadow(sheetShade, 26, function() return WinPop.spring.x end)
+    softShadow(ornShade, 26, function() return WinPop.spring.x * 0.8 end)
 
     local Win = new("Frame", { Name = "Window", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = WinPop.body })
     W.Win = Win
-    W.Glass = glass(Win, 24, { light = true })
     -- 開いている間はマウスを自由に (一人称でも触れる)
     new("TextButton", { Name = "Modal", Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Text = "", Modal = true, Parent = Win })
 
-    -- ---- サイドバー ----
-    local Side = new("Frame", { Position = UDim2.fromOffset(8, 8), Size = UDim2.new(0, SIDE, 1, -16), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, ZIndex = 2, Parent = Win })
-    corner(Side, 18)
-    gstroke(Side, 0.86, 0.35, 0.95)
-    local logo = new("Frame", { Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(32, 32), BackgroundColor3 = accent(), ZIndex = 3, Parent = Side })
-    corner(logo, 10)
-    new("UIGradient", { Rotation = 90, Color = ColorSequence.new(WHITE, rgb(190, 190, 205)), Parent = logo })
-    gstroke(logo, 0.6, 0.1, 0.9)
-    local logoIcon = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, ZIndex = 4, Parent = logo })
-    setIcon(logoIcon, W.Icon)
-    onAccent(function(a) logo.BackgroundColor3 = a logoIcon.ImageColor3 = contrast(a) end)
-    text({ Position = UDim2.fromOffset(52, W.Subtitle ~= "" and 12 or 19), Size = UDim2.new(1, -60, 0, 18), Text = W.Name, FontFace = F.Heavy, TextSize = 15, ZIndex = 3, Parent = Side })
-    if W.Subtitle ~= "" then
-        text({ Position = UDim2.fromOffset(52, 30), Size = UDim2.new(1, -60, 0, 14), Text = W.Subtitle, TextSize = 11, TextColor3 = C.Muted, ZIndex = 3, Parent = Side })
-    end
-    local sideDrag = new("Frame", { Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, ZIndex = 2, Parent = Side })
+    -- ---- シート ----
+    local Sheet = new("Frame", { Position = UDim2.fromOffset(ORN + GAP, 0), Size = UDim2.fromOffset(SW, MINH), BackgroundTransparency = 1, ZIndex = 2, Parent = Win })
+    W.Sheet = Sheet
+    W.Glass = glass(Sheet, 26)
+    local headDrag = new("Frame", { Size = UDim2.new(1, -96, 0, 64), BackgroundTransparency = 1, ZIndex = 2, Parent = Sheet })
+    W.TitleLabel = text({ Position = UDim2.fromOffset(22, 16), Size = UDim2.new(1, -120, 0, 26), Text = "", FontFace = F.Heavy, TextSize = 22, ZIndex = 3, Parent = Sheet })
+    W.DescLabel = text({ Position = UDim2.fromOffset(22, 43), Size = UDim2.new(1, -120, 0, 14), Text = "", TextSize = 11, TextColor3 = C.Muted, ZIndex = 3, Parent = Sheet })
+    local sBtn = iconButton(Sheet, "search", 16, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -48, 0, 18), ZIndex = 4 })
+    local xBtn = iconButton(Sheet, "x", 16, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 18), ZIndex = 4 })
 
-    local TabScroll = new("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 58), Size = UDim2.new(1, 0, 1, -58 - 58), BackgroundTransparency = 1, BorderSizePixel = 0,
-        ScrollBarThickness = 0, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3, Parent = Side,
-    })
-    local Ind = new("Frame", { Position = UDim2.fromOffset(8, 4), Size = UDim2.new(1, -16, 0, 34), BackgroundColor3 = accent(), BackgroundTransparency = 1, ZIndex = 3, Parent = TabScroll })
-    corner(Ind, 11)
-    local indStroke = gstroke(Ind, 1, 0.2, 0.9)
-    onAccent(function(a) Ind.BackgroundColor3 = a end)
-    local TabList = new("Frame", { Position = UDim2.fromOffset(8, 4), Size = UDim2.new(1, -16, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 4, Parent = TabScroll })
-    new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = TabList })
-    W.TabList = TabList
-    W.IndTop, W.IndBot, W.IndA = spring(0, 22, 0.9), spring(34, 22, 0.9), spring(0, 20, 1)
-    onStep(function()
-        local a = W.IndA.x
-        Ind.Position = UDim2.fromOffset(8, 4 + W.IndTop.x)
-        Ind.Size = UDim2.new(1, -16, 0, math.max(W.IndBot.x - W.IndTop.x, 10))
-        Ind.BackgroundTransparency = 1 - 0.24 * a
-        indStroke.Transparency = 1 - 0.55 * a
-    end)
-
-    -- 下: 自分のアバターと名前
-    new("Frame", { Position = UDim2.new(0, 12, 1, -58), Size = UDim2.new(1, -24, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.9, BorderSizePixel = 0, ZIndex = 3, Parent = Side })
-    local avatar = new("ImageLabel", { Position = UDim2.new(0, 12, 1, -45), Size = UDim2.fromOffset(32, 32), BackgroundColor3 = C.Raised, Image = "", ZIndex = 3, Parent = Side })
-    corner(avatar, UDim.new(1, 0))
-    gstroke(avatar, 0.7, 0.2, 0.9)
-    task.spawn(function()
-        local ok, img = pcall(Players.GetUserThumbnailAsync, Players, LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-        if ok and img then avatar.Image = img end
-    end)
-    text({ Position = UDim2.new(0, 52, 1, -46), Size = UDim2.new(1, -60, 0, 17), Text = LocalPlayer.DisplayName, FontFace = F.Bold, TextSize = 13, ZIndex = 3, Parent = Side })
-    text({ Position = UDim2.new(0, 52, 1, -29), Size = UDim2.new(1, -60, 0, 14), Text = "@" .. LocalPlayer.Name, TextSize = 11, TextColor3 = C.Muted, ZIndex = 3, Parent = Side })
-
-    -- ---- 右側 ----
-    local Content = new("Frame", { Position = UDim2.fromOffset(SIDE + 16, 0), Size = UDim2.new(1, -(SIDE + 16), 1, 0), BackgroundTransparency = 1, ZIndex = 2, Parent = Win })
-    local topDrag = new("Frame", { Size = UDim2.new(1, -150, 0, 56), BackgroundTransparency = 1, ZIndex = 1, Parent = Content })
-    W.TitleLabel = text({ Position = UDim2.fromOffset(4, 12), Size = UDim2.new(1, -230, 0, 26), Text = "", FontFace = F.Heavy, TextSize = 21, ZIndex = 3, Parent = Content })
-    W.DescLabel = text({ Position = UDim2.fromOffset(4, 37), Size = UDim2.new(1, -230, 0, 14), Text = "", TextSize = 11, TextColor3 = C.Muted, ZIndex = 3, Parent = Content })
-
-    -- 右上: 検索 / しまう / 閉じる (iOS のツールバーのように、ガラスのカプセルにまとめる)
-    local Cap = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 13), Size = UDim2.fromOffset(97, 33), BackgroundColor3 = WHITE, BackgroundTransparency = 0.95, ZIndex = 3, Parent = Content })
-    corner(Cap, UDim.new(1, 0))
-    gstroke(Cap, 0.82, 0.35, 0.9)
-    local sBtn = iconButton(Cap, "search", 15, { ZIndex = 4 })
-    local mBtn = iconButton(Cap, "minus", 15, { ZIndex = 4 })
-    local xBtn = iconButton(Cap, "x", 15, { ZIndex = 4 })
+    -- 検索: 見出しが消えて、同じ場所に入力欄が浮かぶ
     local Search = new("TextBox", {
-        Position = UDim2.fromOffset(32, 0), Size = UDim2.fromOffset(0, 33), BackgroundTransparency = 1, Text = "", PlaceholderText = "search",
-        PlaceholderColor3 = C.Muted, TextColor3 = C.Text, FontFace = F.Medium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left,
-        ClearTextOnFocus = false, ClipsDescendants = true, Visible = false, ZIndex = 4, Parent = Cap,
+        Position = UDim2.fromOffset(16, 17), Size = UDim2.new(1, -104, 0, 32), BackgroundColor3 = BLACK, BackgroundTransparency = 1,
+        Text = "", PlaceholderText = "search", PlaceholderColor3 = C.Muted, TextColor3 = C.Text, TextTransparency = 1,
+        FontFace = F.Medium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Visible = false, ZIndex = 5, Parent = Sheet,
     })
-    local sw = spring(0, 24, 0.86)
-    onStep(function()
-        local wv = math.max(sw.x, 0)
-        Cap.Size = UDim2.fromOffset(math.floor(97 + wv + 0.5), 33)
-        sBtn.Position = UDim2.fromOffset(3, 2)
-        Search.Size = UDim2.fromOffset(math.floor(wv), 33)
-        Search.Visible = wv > 6
-        mBtn.Position = UDim2.fromOffset(math.floor(34 + wv), 2)
-        xBtn.Position = UDim2.fromOffset(math.floor(65 + wv), 2)
-    end)
+    corner(Search, UDim.new(1, 0))
+    local searchStroke = stroke(Search, WHITE, 1, 1)
+    new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = Search })
+    W.SearchBox = Search
+    local function setSearching(on)
+        W._searching = on
+        if on then
+            Search.Visible = true
+            Search.Position = UDim2.fromOffset(16, 23)
+            tween(Search, { BackgroundTransparency = 0.55, TextTransparency = 0, Position = UDim2.fromOffset(16, 17) }, 0.4)
+            tween(searchStroke, { Transparency = 0.86 }, 0.4)
+            tween(W.TitleLabel, { TextTransparency = 1 }, 0.2)
+            tween(W.DescLabel, { TextTransparency = 1 }, 0.2)
+            Search:CaptureFocus()
+        else
+            tween(Search, { BackgroundTransparency = 1, TextTransparency = 1 }, 0.2)
+            tween(searchStroke, { Transparency = 1 }, 0.2)
+            tween(W.TitleLabel, { TextTransparency = 0 }, 0.4)
+            tween(W.DescLabel, { TextTransparency = 0 }, 0.45)
+            task.delay(0.2, function() if not W._searching then Search.Visible = false end end)
+        end
+    end
     function W:_applySearch(q)
         q = string.lower(q or "")
         for _, tab in ipairs(self.Tabs) do
@@ -1782,17 +1695,16 @@ function Lib:CreateWindow(o)
                 else it.frame.Visible = it.visible ~= false and string.find(it.text, q, 1, true) ~= nil end
             end
             for _, s in ipairs(tab.Page.sections) do s.Visible = q == "" end
+            for _, c in ipairs(tab.Page.cards) do
+                local any = #c.items == 0 and q == ""
+                for _, it in ipairs(c.items) do if it.frame.Visible then any = true break end end
+                c.frame.Visible = any
+            end
         end
     end
-    sBtn.MouseButton1Click:Connect(function()
-        if sw.t > 0 and Search.Text == "" then sw.t = 0 return end
-        sw.t = 150
-        Search:CaptureFocus()
-    end)
+    sBtn.MouseButton1Click:Connect(function() setSearching(not W._searching) if not W._searching then Search.Text = "" end end)
     Search:GetPropertyChangedSignal("Text"):Connect(function() W:_applySearch(Search.Text) end)
-    Search.FocusLost:Connect(function() if Search.Text == "" then sw.t = 0 end end)
-    W.SearchBox = Search
-    mBtn.MouseButton1Click:Connect(function() W:SetVisible(false) end)
+    Search.FocusLost:Connect(function() if Search.Text == "" then setSearching(false) end end)
     xBtn.MouseButton1Click:Connect(function()
         W:Confirm({
             Title = "close " .. W.Name .. "?", Content = "UI を完全に閉じます。もう一度出すにはスクリプトを実行し直してください",
@@ -1801,9 +1713,54 @@ function Lib:CreateWindow(o)
         })
     end)
 
-    W.Pages = new("Frame", { Position = UDim2.fromOffset(0, 60), Size = UDim2.new(1, -8, 1, -68), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 2, Parent = Content })
+    W.Pages = new("Frame", { Position = UDim2.fromOffset(0, 70), Size = UDim2.new(1, 0, 1, -74), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 2, Parent = Sheet })
 
-    -- ---- ドラッグ (上の帯とサイドバーの頭) ----
+    -- ---- 左のカプセル (タブ) ----
+    local Orn = new("Frame", { Size = UDim2.fromOffset(ORN, 8), BackgroundColor3 = rgb(9, 9, 12), BackgroundTransparency = 0.06, ZIndex = 10, Parent = Win })
+    corner(Orn, 26)
+    gstroke(Orn, 0.76, 0.15, 0.9)
+    local OrnInd = new("Frame", { Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 0, 40), BackgroundColor3 = accent(), ZIndex = 11, Parent = Orn })
+    corner(OrnInd, 20)
+    new("UIGradient", { Rotation = 90, Color = ColorSequence.new(WHITE, rgb(205, 205, 218)), Parent = OrnInd })
+    gstroke(OrnInd, 0.55, 0.1, 0.9)
+    onAccent(function(a) OrnInd.BackgroundColor3 = a end)
+    W.OrnList = new("Frame", { Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 1, -12), BackgroundTransparency = 1, ZIndex = 12, Parent = Orn })
+    W.IndTop, W.IndBot = spring(0, 22, 0.9), spring(40, 22, 0.9)
+    Orn.MouseEnter:Connect(function() ow.t = ORN_OPEN end)
+    Orn.MouseLeave:Connect(function() ow.t = ORN end)
+
+    -- その下の小さな丸: しまう (島に残る)
+    local Hide = new("TextButton", { Size = UDim2.fromOffset(ORN, ORN), BackgroundColor3 = rgb(9, 9, 12), BackgroundTransparency = 0.06, Text = "", AutoButtonColor = false, ZIndex = 10, Parent = Win })
+    corner(Hide, UDim.new(1, 0))
+    gstroke(Hide, 0.76, 0.15, 0.9)
+    local hideIcon = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, ImageColor3 = C.Sub, ZIndex = 11, Parent = Hide })
+    setIcon(hideIcon, "chevron-up")
+    bounce(Hide, nil, 1.06, 30, 0.86, 0.9)
+    Hide.MouseEnter:Connect(function() tween(hideIcon, { ImageColor3 = C.Text }, 0.12) end)
+    Hide.MouseLeave:Connect(function() tween(hideIcon, { ImageColor3 = C.Sub }, 0.18) end)
+    Hide.MouseButton1Click:Connect(function() W:SetVisible(false) end)
+
+    -- 毎フレーム: シートの高さ・カプセルの幅・印
+    onStep(function()
+        local cur = W.Current
+        if cur and cur.Layout then
+            local ch = cur.Layout.AbsoluteContentSize.Y / math.max(RootScale.Scale, 0.01)
+            sh.t = math.clamp(70 + ch + 18, MINH, MAXH)
+        end
+        local h = math.floor(sh.x + 0.5)
+        Sheet.Size = UDim2.fromOffset(SW, h)
+        sheetShade.Size = UDim2.fromOffset(SW, h)
+        local wv = math.floor(ow.x + 0.5)
+        Orn.Size = UDim2.fromOffset(wv, W.OrnH)
+        ornShade.Size = UDim2.fromOffset(ORN, W.OrnH)
+        Hide.Position = UDim2.fromOffset(0, W.OrnH + 10)
+        OrnInd.Position = UDim2.fromOffset(6, 6 + W.IndTop.x)
+        OrnInd.Size = UDim2.new(1, -12, 0, math.max(W.IndBot.x - W.IndTop.x, 12))
+        local la = clamp01((ow.x - ORN) / (ORN_OPEN - ORN))
+        for _, tab in ipairs(W.Tabs) do tab._label.TextTransparency = 1 - la * la end
+    end)
+
+    -- ---- ドラッグ (シートの上の帯) ----
     local function dragHandle(f)
         f.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1815,8 +1772,7 @@ function Lib:CreateWindow(o)
             end
         end)
     end
-    dragHandle(topDrag)
-    dragHandle(sideDrag)
+    dragHandle(headDrag)
     conn(UserInputService.InputChanged:Connect(function(input)
         local d = W._drag
         if d and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
@@ -1889,34 +1845,36 @@ function Lib:CreateWindow(o)
     return W
 end
 
--- ---- タブ ----
+-- ---- タブ (左の浮いたカプセルにアイコンだけ。乗せると広がって名前が出る) ----
 function Window:CreateTab(a, b)
     local o = type(a) == "table" and a or { Name = a, Icon = b }
     local W = self
     local idx = #W.Tabs + 1
-    local btn = new("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, LayoutOrder = idx, ZIndex = 4, Parent = W.TabList })
-    local ic = new("ImageLabel", { Position = UDim2.fromOffset(11, 9), Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, ImageColor3 = C.Sub, ZIndex = 5, Parent = btn })
+    local btn = new("TextButton", { Position = UDim2.fromOffset(0, (idx - 1) * 44), Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 13, Parent = W.OrnList })
+    local ic = new("ImageLabel", { Position = UDim2.fromOffset(11, 11), Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, ImageColor3 = C.Sub, ZIndex = 14, Parent = btn })
     setIcon(ic, o.Icon or "circle")
-    local lb = text({ Position = UDim2.fromOffset(37, 0), Size = UDim2.new(1, -42, 1, 0), Text = tostring(o.Name or "Tab"), TextSize = 13, TextColor3 = C.Sub, ZIndex = 5, Parent = btn })
-    bounce(btn, nil, 1.02, 30, 0.86, 0.96)
+    local lb = text({ Position = UDim2.fromOffset(42, 0), Size = UDim2.new(1, -48, 1, 0), Text = tostring(o.Name or "Tab"), FontFace = F.Bold, TextSize = 13, TextColor3 = C.Sub, TextTransparency = 1, ZIndex = 14, Parent = btn })
+    bounce(btn, nil, 1.04, 30, 0.86, 0.92)
 
     local holder = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = W.Pages })
-    local pp = pop(holder, { from = 0.985, dy = 12, speed = 24, damp = 0.9 })
+    local pp = pop(holder, { from = 0.97, dy = 18, speed = 22, damp = 0.88 })
     local scroll = new("ScrollingFrame", {
-        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
-        ScrollBarImageColor3 = WHITE, ScrollBarImageTransparency = 0.75, CanvasSize = UDim2.new(),
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2,
+        ScrollBarImageColor3 = WHITE, ScrollBarImageTransparency = 0.8, CanvasSize = UDim2.new(),
         AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y, Parent = pp.body,
     })
-    new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
-    new("UIPadding", { PaddingTop = UDim.new(0, 2), PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 10), PaddingBottom = UDim.new(0, 12), Parent = scroll })
-    local page = { items = {}, sections = {}, scroll = scroll }
+    local layout = new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+    new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), PaddingBottom = UDim.new(0, 14), Parent = scroll })
+    local page = { items = {}, sections = {}, cards = {}, scroll = scroll, order = 0 }
     local T = newContainer(W, page, scroll, {
-        IsTab = true, Name = tostring(o.Name or "Tab"), Desc = o.Desc, Index = idx, Pop = pp, Button = btn, _icon = ic, _label = lb,
+        IsTab = true, Name = tostring(o.Name or "Tab"), Desc = o.Desc, Index = idx, Pop = pp, Button = btn,
+        Layout = layout, _icon = ic, _label = lb,
     })
-    btn.MouseEnter:Connect(function() if W.Current ~= T then tween(lb, { TextColor3 = C.Text }, 0.12) end end)
-    btn.MouseLeave:Connect(function() if W.Current ~= T then tween(lb, { TextColor3 = C.Sub }, 0.18) end end)
+    btn.MouseEnter:Connect(function() if W.Current ~= T then tween(ic, { ImageColor3 = C.Text }, 0.12) tween(lb, { TextColor3 = C.Text }, 0.12) end end)
+    btn.MouseLeave:Connect(function() if W.Current ~= T then tween(ic, { ImageColor3 = C.Sub }, 0.18) tween(lb, { TextColor3 = C.Sub }, 0.18) end end)
     btn.MouseButton1Click:Connect(function() W:SelectTab(T) end)
     table.insert(W.Tabs, T)
+    W.OrnH = #W.Tabs * 44 + 8
     if not W.Current then W:SelectTab(T, true) end
     return T
 end
@@ -1930,35 +1888,43 @@ function Window:SelectTab(t, instant)
     if type(t) ~= "table" or self.Current == t then return end
     local prev = self.Current
     self.Current = t
+    local down = not prev or t.Index > prev.Index
+    -- ページは縦に滑る: 下のタブへ行く時は下から入って、前のページは上へ抜ける
+    t.Pop.dy = down and 22 or -22
+    if prev then prev.Pop.dy = down and -22 or 22 end
+    local on = contrast(accent())
     for _, x in ipairs(self.Tabs) do
-        local on = x == t
-        x.Pop:Set(on)
-        if on and instant then x.Pop:Snap(true) end
-        x._label.FontFace = on and F.Bold or F.Medium
-        tween(x._label, { TextColor3 = on and C.Text or C.Sub }, 0.2)
-        tween(x._icon, { ImageColor3 = on and accent():Lerp(WHITE, 0.25) or C.Sub }, 0.2)
+        local sel = x == t
+        x.Pop:Set(sel)
+        if sel and instant then x.Pop:Snap(true) end
+        tween(x._icon, { ImageColor3 = sel and on or C.Sub }, 0.22)
+        tween(x._label, { TextColor3 = sel and on or C.Sub }, 0.22)
     end
     if not self._accentHooked then
         self._accentHooked = true
-        onAccent(function(a) if self.Current then self.Current._icon.ImageColor3 = a:Lerp(WHITE, 0.25) end end)
+        onAccent(function(a)
+            if self.Current then
+                self.Current._icon.ImageColor3 = contrast(a)
+                self.Current._label.TextColor3 = contrast(a)
+            end
+        end)
     end
     -- 印は液体のように: 進む側の端が先に伸び、後ろの端が追いつく
-    local top = (t.Index - 1) * 36
-    local down = not prev or t.Index > prev.Index
+    local top = (t.Index - 1) * 44
     self.IndTop.w, self.IndBot.w = down and 15 or 30, down and 30 or 15
-    self.IndTop.t, self.IndBot.t = top, top + 34
-    self.IndA.t = 1
-    if instant then
-        self.IndTop.x, self.IndBot.x, self.IndA.x = top, top + 34, 1
-    end
+    self.IndTop.t, self.IndBot.t = top, top + 40
+    if instant then self.IndTop.x, self.IndBot.x = top, top + 40 end
+    -- 見出し: 下から浮かんでくる
     local hasDesc = t.Desc ~= nil and t.Desc ~= ""
-    local ty = hasDesc and 12 or 18
+    local ty = hasDesc and 16 or 24
     self.TitleLabel.Text = t.Name
     self.DescLabel.Text = t.Desc or ""
     self.TitleLabel.TextTransparency, self.DescLabel.TextTransparency = 1, 1
-    self.TitleLabel.Position = UDim2.fromOffset(4, ty + 6)
-    tween(self.TitleLabel, { TextTransparency = 0, Position = UDim2.fromOffset(4, ty) }, 0.45)
-    tween(self.DescLabel, { TextTransparency = 0 }, 0.5)
+    self.TitleLabel.Position = UDim2.fromOffset(22, ty + (down and 8 or -8))
+    if not self._searching then
+        tween(self.TitleLabel, { TextTransparency = 0, Position = UDim2.fromOffset(22, ty) }, 0.5)
+        tween(self.DescLabel, { TextTransparency = 0 }, 0.55)
+    end
     if self.SearchBox and self.SearchBox.Text ~= "" then self.SearchBox.Text = "" end
 end
 
@@ -2119,8 +2085,8 @@ function Window:Dialog(o)
     local hasIcon = o.Icon ~= nil
     local top = hasIcon and 70 or 22
     local h = top + 24 + (th > 0 and th + 8 or 0) + 16 + 34 + 16
-    local overlay = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 40, Parent = W.Win })
-    corner(overlay, 24)
+    local overlay = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 40, Parent = W.Sheet })
+    corner(overlay, 26)
     tween(overlay, { BackgroundTransparency = 0.45 }, 0.3)
     local holder = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(WIDTH, h), BackgroundTransparency = 1, ZIndex = 41, Parent = overlay })
     local p = pop(holder, { from = 0.86, dy = 14, speed = 24, damp = 0.8 })
@@ -2186,28 +2152,36 @@ function Window:Confirm(o)
     })
 end
 
--- ---- 角の小さなカード (名前 | fps | ping | 時刻。ドラッグで動かせる) ----
+-- ---- 小さな黒いカプセル (島と同じ見た目。● 名前  60 fps  24 ms。ドラッグで動かせる) ----
 function Window:CreateWatermark(o)
     o = o or {}
     local W = self
     local stats = o.Stats or { "fps", "ping" }
-    local f = new("Frame", { Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(0, 30), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 55, Parent = W.Gui })
-    local g = glass(f, 15, { blobs = false })
-    local dot = new("Frame", { Position = UDim2.fromOffset(12, 11), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = accent(), ZIndex = 56, Parent = f })
+    local f = new("Frame", { Position = UDim2.fromOffset(16, 14), Size = UDim2.fromOffset(120, 28), BackgroundColor3 = rgb(4, 4, 6), BackgroundTransparency = 0.04, ZIndex = 55, Parent = W.Gui })
+    corner(f, UDim.new(1, 0))
+    local st = stroke(f, WHITE, 0.72)
+    new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(0.3, 0.95), Parent = st })
+    local dot = new("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.5, 0), Size = UDim2.fromOffset(6, 6), BackgroundColor3 = accent(), ZIndex = 56, Parent = f })
     corner(dot, UDim.new(1, 0))
     onAccent(function(a) dot.BackgroundColor3 = a end)
-    local lb = text({ Position = UDim2.fromOffset(28, 0), Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", FontFace = F.Bold, TextSize = 12, TextTruncate = Enum.TextTruncate.None, RichText = true, ZIndex = 56, Parent = f })
-    new("UIPadding", { PaddingRight = UDim.new(0, 12), Parent = lb })
+    local nameLb = text({ Position = UDim2.fromOffset(25, 0), Size = UDim2.new(0, 300, 1, 0), Text = "", FontFace = F.Bold, TextSize = 12, TextTruncate = Enum.TextTruncate.None, ZIndex = 56, Parent = f })
+    local statLb = text({ Position = UDim2.fromOffset(25, 0), Size = UDim2.new(0, 300, 1, 0), Text = "", FontFace = F.Medium, TextSize = 12, TextColor3 = C.Muted, TextTruncate = Enum.TextTruncate.None, ZIndex = 56, Parent = f })
     local name = o.Text or W.Name
     local frames, fps, acc = 0, 60, 0
+    local w = spring(120, 20, 0.9)
     local stop = onStep(function(dt)
         frames += 1
         acc += dt
         if acc >= 0.5 then fps = math.floor(frames / acc + 0.5) frames, acc = 0, 0 end
+        -- 文字の幅に合わせて、カプセルがなめらかに伸び縮みする
+        local nx = nameLb.TextBounds.X
+        statLb.Position = UDim2.fromOffset(25 + nx + 10, 0)
+        w.t = 25 + nx + (statLb.Text ~= "" and statLb.TextBounds.X + 10 or 0) + 13
+        f.Size = UDim2.fromOffset(math.floor(w.x + 0.5), 28)
     end)
     task.spawn(function()
         while f.Parent and W.Alive do
-            local parts = { name }
+            local parts = {}
             for _, s in ipairs(stats) do
                 if s == "fps" then parts[#parts + 1] = fps .. " fps"
                 elseif s == "ping" then
@@ -2216,7 +2190,8 @@ function Window:CreateWatermark(o)
                 elseif s == "time" then parts[#parts + 1] = os.date("%H:%M")
                 end
             end
-            lb.Text = table.concat(parts, '  <font color="#78788a">|</font>  ')
+            nameLb.Text = name
+            statLb.Text = table.concat(parts, "  ")
             task.wait(0.5)
         end
         stop()
@@ -2226,6 +2201,7 @@ function Window:CreateWatermark(o)
     f.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging, start, startPos = true, input.Position, f.Position
+            tween(st, { Transparency = 0.4 }, 0.15)
         end
     end)
     conn(UserInputService.InputChanged:Connect(function(input)
@@ -2235,12 +2211,15 @@ function Window:CreateWatermark(o)
         end
     end))
     conn(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+            dragging = false
+            tween(st, { Transparency = 0.72 }, 0.3)
+        end
     end))
     local wm = { Frame = f }
-    function wm:SetText(t) name = tostring(t) end
+    function wm:SetText(t) name = tostring(t) nameLb.Text = name end
     function wm:SetVisible(v) f.Visible = v ~= false end
-    function wm:Destroy() Glasses[g] = nil f:Destroy() end
+    function wm:Destroy() f:Destroy() end
     return wm
 end
 
