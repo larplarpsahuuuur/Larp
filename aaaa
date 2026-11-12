@@ -183,6 +183,8 @@ local function resolveIcon(name)
 end
 -- 読み込みを待たずに置いて、取れたら絵を入れる (取れなければ fallbacks を順に試す)
 local function setIcon(label, name, fallbacks)
+    -- 正方形でない絵が引き伸ばされないように (アイコンごとに大きさがバラバラに見える原因)
+    pcall(function() label.ScaleType = Enum.ScaleType.Fit end)
     task.spawn(function()
         local img = resolveIcon(name)
         if not img and fallbacks then
@@ -597,7 +599,7 @@ local function baseRow(cont, o, opts)
     local H0
     if opts.stacked then H0 = hasDesc and 48 or 36 else H0 = hasDesc and 50 or 40 end
     local height = opts.stacked and (H0 + (opts.extra or 0)) or H0
-    local r, hl, card = cont:_cardRow(height, o.Icon and 46 or 14)
+    local r, hl, card = cont:_cardRow(height, o.Icon and 50 or 14)
     r.Name = tostring(o.Name or "Row")
     r.ClipsDescendants = opts.clip or false
     r.MouseEnter:Connect(function() tween(hl, { BackgroundTransparency = 0.965 }, 0.15) end)
@@ -605,28 +607,28 @@ local function baseRow(cont, o, opts)
 
     local x = 14
     if o.Icon then
-        local sq = new("Frame", { Position = UDim2.fromOffset(10, math.floor((H0 - 26) / 2)), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = o.IconColor or accent(), ZIndex = 2, Parent = r })
+        local sq = new("Frame", { Position = UDim2.fromOffset(10, math.floor((H0 - 28) / 2)), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = o.IconColor or accent(), ZIndex = 2, Parent = r })
         corner(sq, 8)
         new("UIGradient", { Rotation = 90, Color = ColorSequence.new(WHITE, rgb(200, 200, 212)), Parent = sq })
-        gstroke(sq, 0.7, 0.2, 0.9)
+        gstroke(sq, 0.78, 0.1, 1)
         local ic = new("ImageLabel", {
-            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(15, 15),
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(16, 16),
             BackgroundTransparency = 1, ImageColor3 = contrast(o.IconColor or accent()), ZIndex = 3, Parent = sq,
         })
         setIcon(ic, o.Icon)
         if not o.IconColor then
             onAccent(function(a) sq.BackgroundColor3 = a ic.ImageColor3 = contrast(a) end)
         end
-        x = 46
+        x = 50
     end
     local reserve = (opts.right or 0) + 10
     local scale = 1 - (opts.rightScale or 0)
     local title, desc
     if hasDesc then
-        title = text({ Position = UDim2.fromOffset(x, math.floor(H0 / 2) - 17), Size = UDim2.new(scale, -x - reserve, 0, 18), Text = tostring(o.Name or ""), FontFace = F.Bold, TextSize = 13, ZIndex = 2, Parent = r })
+        title = text({ Position = UDim2.fromOffset(x, math.floor(H0 / 2) - 17), Size = UDim2.new(scale, -x - reserve, 0, 18), Text = tostring(o.Name or ""), FontFace = F.Medium, TextSize = 14, ZIndex = 2, Parent = r })
         desc = text({ Position = UDim2.fromOffset(x, math.floor(H0 / 2) + 2), Size = UDim2.new(scale, -x - reserve, 0, 14), Text = tostring(o.Desc), TextSize = 11, TextColor3 = C.Muted, ZIndex = 2, Parent = r })
     else
-        title = text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(scale, -x - reserve, 0, H0), Text = tostring(o.Name or ""), FontFace = F.Bold, TextSize = 13, ZIndex = 2, Parent = r })
+        title = text({ Position = UDim2.fromOffset(x, 0), Size = UDim2.new(scale, -x - reserve, 0, H0), Text = tostring(o.Name or ""), FontFace = F.Medium, TextSize = 14, ZIndex = 2, Parent = r })
     end
     return { row = r, hl = hl, card = card, title = title, desc = desc, H0 = H0, x = x }
 end
@@ -698,7 +700,7 @@ function Container:CreateButton(o)
     local R = baseRow(self, o, { right = 24 })
     local e = newElement(self, o, R, "Button")
     local chev = new("ImageLabel", {
-        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(14, 14),
+        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(12, 12),
         BackgroundTransparency = 1, ImageColor3 = C.Muted, ZIndex = 2, Parent = R.row,
     })
     setIcon(chev, o.RightIcon or "chevron-right")
@@ -814,6 +816,14 @@ function Container:CreateSlider(o)
     corner(thumb, UDim.new(1, 0))
     stroke(thumb, BLACK, 0.8, 1)
     local thumbScale = new("UIScale", { Scale = 0.8, Parent = thumb })
+    -- つかんでいる間だけ、つまみの上に値の小さな吹き出し
+    local bubble = new("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = rgb(4, 4, 6), Visible = false, ZIndex = 8, Parent = hit })
+    corner(bubble, UDim.new(1, 0))
+    gstroke(bubble, 0.7, 0.2, 0.9)
+    local bubbleText = text({ Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", FontFace = F.Bold, TextSize = 11, TextTruncate = Enum.TextTruncate.None, ZIndex = 9, Parent = bubble })
+    new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = bubbleText })
+    local bubbleScale = new("UIScale", { Parent = bubble })
+    local ba = spring(0, 26, 0.75)
     -- 段階が少ない時は目盛りを打つ (つまみが吸い付く場所が見える)
     local steps = math.floor((max - min) / inc + 0.5)
     if o.Ticks ~= false and steps >= 2 and steps <= 12 then
@@ -834,6 +844,15 @@ function Container:CreateSlider(o)
         fill.Size = UDim2.fromScale(p, 1)
         thumb.Position = UDim2.fromScale(p, 0.5)
         thumbScale.Scale = 0.8 + 0.3 * h
+        ba.t = (dragging and dragging()) and 1 or 0
+        bubble.Visible = ba.x > 0.02
+        if bubble.Visible then
+            bubble.Position = UDim2.new(p, 0, 0, -2 - 6 * ba.x)
+            bubbleScale.Scale = 0.6 + 0.4 * ba.x
+            bubble.BackgroundTransparency = 1 - clamp01(ba.x)
+            bubbleText.TextTransparency = 1 - clamp01(ba.x)
+            bubbleText.Text = fmt(e.Value) .. suffix
+        end
         fill.BackgroundColor3 = WHITE:Lerp(accent(), 0.35 + 0.65 * h)
     end)
     function e:Set(v, silent)
@@ -886,9 +905,11 @@ function Container:CreateDropdown(o)
         AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, H0 / 2), Size = UDim2.fromOffset(14, 14),
         BackgroundTransparency = 1, ImageColor3 = C.Sub, ZIndex = 2, Parent = R.row,
     })
-    setIcon(chev, "chevron-down")
+    setIcon(chev, "chevrons-up-down", { "chevron-down" }) -- iOS のメニューと同じ上下の矢印
     local hit = new("TextButton", { Size = UDim2.new(1, 0, 0, H0), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = R.row })
-    new("Frame", { Position = UDim2.fromOffset(12, H0), Size = UDim2.new(1, -24, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.9, BorderSizePixel = 0, ZIndex = 2, Parent = R.row })
+    -- 開いた中身: 閉じている時は CanvasGroup ごと消す (縁取りが行の外へはみ出さない)
+    local body = new("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = 3, Parent = R.row })
+    new("Frame", { Position = UDim2.fromOffset(12, H0), Size = UDim2.new(1, -24, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.9, BorderSizePixel = 0, ZIndex = 2, Parent = body })
 
     local useSearch = o.Search or #e.Options >= 8
     local search
@@ -896,7 +917,7 @@ function Container:CreateDropdown(o)
         search = new("TextBox", {
             Position = UDim2.fromOffset(10, H0 + 8), Size = UDim2.new(1, -20, 0, 28), BackgroundColor3 = BLACK, BackgroundTransparency = 0.6,
             Text = "", PlaceholderText = "search", PlaceholderColor3 = C.Muted, ClearTextOnFocus = false, FontFace = F.Medium,
-            TextSize = 12, TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3, Parent = R.row,
+            TextSize = 12, TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3, Parent = body,
         })
         corner(search, 9)
         stroke(search, WHITE, 0.88, 1)
@@ -906,14 +927,19 @@ function Container:CreateDropdown(o)
     local list = new("ScrollingFrame", {
         Position = UDim2.fromOffset(6, listTop), Size = UDim2.new(1, -12, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
         ScrollBarThickness = 2, ScrollBarImageColor3 = WHITE, ScrollBarImageTransparency = 0.7, CanvasSize = UDim2.new(),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3, Parent = R.row,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3, Parent = body,
     })
     new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list })
 
     local items, open = {}, false
     local hs = heightSpring(R.row, H0)
     local rot = spring(0, 22, 0.85)
-    onStep(function() chev.Rotation = rot.x * 180 end)
+    onStep(function()
+        local p = clamp01((hs.x - H0) / 40)
+        body.Visible = p > 0.01
+        body.GroupTransparency = 1 - p
+        chev.ImageColor3 = C.Sub:Lerp(accent(), clamp01(rot.x))
+    end)
 
     local function isSel(v) if multi then return table.find(e.Value, v) ~= nil end return e.Value == v end
     local function paint()
@@ -1019,8 +1045,20 @@ function Container:CreateInput(o)
     })
     corner(box, 9)
     local st = stroke(box, WHITE, 0.88, 1)
-    new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = box })
+    new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 26), Parent = box })
     box.Focused:Connect(function() tween(st, { Color = accent(), Transparency = 0.3 }, 0.15) end)
+    -- 文字がある時だけ、右に小さな消すボタン (iOS と同じ)
+    local clear = new("ImageButton", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -15, 0, R.H0 / 2), Size = UDim2.fromOffset(16, 16), BackgroundColor3 = C.Muted, BackgroundTransparency = 0.2, Image = "", AutoButtonColor = false, Visible = e.Value ~= "", ZIndex = 4, Parent = R.row })
+    corner(clear, UDim.new(1, 0))
+    local clearIc = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(10, 10), BackgroundTransparency = 1, ImageColor3 = rgb(20, 20, 24), ZIndex = 5, Parent = clear })
+    setIcon(clearIc, "x")
+    bounce(clear, nil, 1.12, 30, 0.8, 0.85)
+    clear.MouseButton1Click:Connect(function()
+        box.Text = ""
+        e.Value = ""
+        e:_fire("", false)
+    end)
+    box:GetPropertyChangedSignal("Text"):Connect(function() clear.Visible = box.Text ~= "" end)
     box:GetPropertyChangedSignal("Text"):Connect(function()
         local t = box.Text
         if o.Numeric then t = t:gsub("[^%d%.%-]", "") end
@@ -1116,13 +1154,24 @@ function Container:CreateColorPicker(o)
     local c0 = o.Color or o.Default or accent()
     local h, s, v = c0:ToHSV()
     e.Value = c0
-    local sw = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, H0 / 2), Size = UDim2.fromOffset(38, 22), BackgroundColor3 = c0, ZIndex = 2, Parent = R.row })
-    corner(sw, 8)
-    gstroke(sw, 0.6, 0.1, 0.8)
+    -- iOS の色のボタン: 虹色の輪の中に、今の色の丸
+    local keys = {}
+    for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i / 6, 0.75, 1)) end
+    local well = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, H0 / 2), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, ZIndex = 2, Parent = R.row })
+    corner(well, UDim.new(1, 0))
+    local ring = stroke(well, WHITE, 0, 2.5)
+    local ringGrad = new("UIGradient", { Color = ColorSequence.new(keys), Parent = ring })
+    local sw = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(17, 17), BackgroundColor3 = c0, ZIndex = 3, Parent = well })
+    corner(sw, UDim.new(1, 0))
+    local wellScale = new("UIScale", { Parent = well })
     local hit = new("TextButton", { Size = UDim2.new(1, 0, 0, H0), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = R.row })
+    bounce(hit, well, 1.08, 30, 0.8, 0.9)
+    wellScale.Scale = 1
 
+    -- 開いた中身: 閉じている時は CanvasGroup ごと消す (縁取りが行の外へはみ出さない)
+    local body = new("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = 3, Parent = R.row })
     local SVH = 110
-    local sv = new("Frame", { Position = UDim2.fromOffset(12, H0 + 4), Size = UDim2.new(1, -54, 0, SVH), BackgroundColor3 = Color3.fromHSV(h, 1, 1), ZIndex = 3, Parent = R.row })
+    local sv = new("Frame", { Position = UDim2.fromOffset(12, H0 + 4), Size = UDim2.new(1, -54, 0, SVH), BackgroundColor3 = Color3.fromHSV(h, 1, 1), ZIndex = 3, Parent = body })
     corner(sv, 10)
     local wl = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 3, Parent = sv })
     corner(wl, 10)
@@ -1135,11 +1184,11 @@ function Container:CreateColorPicker(o)
     stroke(cur, WHITE, 0, 2)
     local svHit = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = sv })
 
-    local hue = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, H0 + 4), Size = UDim2.fromOffset(18, SVH), BackgroundColor3 = WHITE, ZIndex = 3, Parent = R.row })
+    local hue = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, H0 + 4), Size = UDim2.fromOffset(18, SVH), BackgroundColor3 = WHITE, ZIndex = 3, Parent = body })
     corner(hue, 9)
-    local keys = {}
-    for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i / 6, 1, 1)) end
-    new("UIGradient", { Rotation = 90, Color = ColorSequence.new(keys), Parent = hue })
+    local hkeys = {}
+    for i = 0, 6 do hkeys[#hkeys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i / 6, 1, 1)) end
+    new("UIGradient", { Rotation = 90, Color = ColorSequence.new(hkeys), Parent = hue })
     local hcur = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, 6, 0, 6), BackgroundColor3 = WHITE, ZIndex = 4, Parent = hue })
     corner(hcur, UDim.new(1, 0))
     stroke(hcur, BLACK, 0.6, 1)
@@ -1147,11 +1196,11 @@ function Container:CreateColorPicker(o)
 
     local hex = new("TextBox", {
         Position = UDim2.fromOffset(12, H0 + SVH + 12), Size = UDim2.fromOffset(92, 26), BackgroundColor3 = BLACK, BackgroundTransparency = 0.6,
-        Text = "", FontFace = F.Bold, TextSize = 12, TextColor3 = C.Text, ClearTextOnFocus = false, ZIndex = 3, Parent = R.row,
+        Text = "", FontFace = F.Bold, TextSize = 12, TextColor3 = C.Text, ClearTextOnFocus = false, ZIndex = 3, Parent = body,
     })
     corner(hex, 8)
     stroke(hex, WHITE, 0.88, 1)
-    local presets = new("Frame", { Position = UDim2.fromOffset(114, H0 + SVH + 12), Size = UDim2.new(1, -126, 0, 26), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = R.row })
+    local presets = new("Frame", { Position = UDim2.fromOffset(114, H0 + SVH + 12), Size = UDim2.new(1, -126, 0, 26), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = body })
     new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6), Parent = presets })
 
     local function paint(skipHex)
@@ -1196,9 +1245,16 @@ function Container:CreateColorPicker(o)
     end)
     local open = false
     local hs = heightSpring(R.row, H0)
+    local FULL = H0 + SVH + 50
+    onStep(function()
+        local p = clamp01((hs.x - H0) / (FULL - H0))
+        body.Visible = p > 0.01
+        body.GroupTransparency = 1 - p * p
+        ringGrad.Rotation = (os.clock() * (open and 90 or 25)) % 360 -- 輪はゆっくり回る (開いている間は少し速く)
+    end)
     hit.MouseButton1Click:Connect(function()
         open = not open
-        hs.t = open and (H0 + SVH + 50) or H0
+        hs.t = open and FULL or H0
     end)
     paint()
     return e
@@ -1760,6 +1816,9 @@ function Lib:CreateWindow(o)
         })
     end)
 
+    -- スクロールすると見出しの下に細い線が出る (iOS の大きな見出しと同じ)
+    local headLine = new("Frame", { Position = UDim2.fromOffset(0, 69), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 4, Parent = Sheet })
+    local headA = spring(0, 18, 1)
     W.Pages = new("Frame", { Position = UDim2.fromOffset(0, 70), Size = UDim2.new(1, 0, 1, -74), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 2, Parent = Sheet })
 
     -- ---- 左のカプセル (タブ) ----
@@ -1795,9 +1854,15 @@ function Lib:CreateWindow(o)
     Hide.MouseLeave:Connect(function() tween(hideIcon, { ImageColor3 = C.Sub }, 0.18) end)
     Hide.MouseButton1Click:Connect(function() W:SetVisible(false) end)
 
+    -- 開く時はシートが先、カプセルは少し遅れて左から寄ってくる
+    W._ox = spring(0, 20, 0.82)
     -- 毎フレーム: シートの高さ・カプセルの幅・印
     onStep(function()
         local cur = W.Current
+        if cur then headA.t = (cur.Page.scroll.CanvasPosition.Y > 2) and 1 or 0 end
+        headLine.BackgroundTransparency = 1 - 0.1 * headA.x
+        local ox = math.floor(-18 * (1 - W._ox.x) + 0.5)
+        Orn.Position = UDim2.fromOffset(ox, 0)
         if cur and cur.Layout then
             local ch = cur.Layout.AbsoluteContentSize.Y / math.max(RootScale.Scale, 0.01)
             sh.t = math.clamp(70 + ch + 18, MINH, MAXH)
@@ -1808,7 +1873,7 @@ function Lib:CreateWindow(o)
         local wv = math.floor(ow.x + 0.5)
         Orn.Size = UDim2.fromOffset(wv, W.OrnH)
         ornShade.Size = UDim2.fromOffset(ORN, W.OrnH)
-        Hide.Position = UDim2.fromOffset(0, W.OrnH + 10)
+        Hide.Position = UDim2.fromOffset(ox, W.OrnH + 10)
         OrnInd.Position = UDim2.fromOffset(6, 6 + LOGO_H + W.IndTop.x)
         OrnInd.Size = UDim2.new(1, -12, 0, math.max(W.IndBot.x - W.IndTop.x, 12))
         local la = clamp01((ow.x - ORN) / (ORN_OPEN - ORN))
@@ -2030,6 +2095,14 @@ function Window:SetVisible(v)
     if not self.Alive then return end
     self.Visible = v and true or false
     self.Pop:Set(self.Visible)
+    if self._ox then
+        if self.Visible then
+            self._ox.x, self._ox.v = 0, 0
+            task.delay(0.07, function() if self.Visible then self._ox.t = 1 end end)
+        else
+            self._ox.t = 0
+        end
+    end
     if self.OpenButton then
         self.Island:Rest(not self.Visible)
     elseif not self.Visible then
@@ -2145,7 +2218,11 @@ function Window:Notify(o)
     if th > 0 then
         text({ Position = UDim2.fromOffset(54, 32), Size = UDim2.new(1, -68, 0, th), Text = content, TextSize = 12, TextColor3 = C.Sub, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 2, Parent = card })
     end
-    local closeBtn = iconButton(card, "x", 12, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 6), ZIndex = 3 })
+    -- 右上はふだん「now」、乗せると × に変わる
+    local closeBtn = iconButton(card, "x", 12, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -6, 0, 6), ZIndex = 3, Visible = false })
+    local nowLb = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 13), Size = UDim2.fromOffset(40, 18), Text = o.Time or "now", TextSize = 11, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = card })
+    card.MouseEnter:Connect(function() closeBtn.Visible = true nowLb.Visible = false end)
+    card.MouseLeave:Connect(function() closeBtn.Visible = false nowLb.Visible = true end)
     local trk = new("Frame", { Position = UDim2.new(0, 16, 1, -6), Size = UDim2.new(1, -32, 0, 2), BackgroundColor3 = WHITE, BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 2, Parent = card })
     corner(trk, UDim.new(1, 0))
     local fill = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = col, BorderSizePixel = 0, ZIndex = 2, Parent = trk })
