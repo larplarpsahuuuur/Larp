@@ -626,12 +626,6 @@ local function baseRow(cont, o, opts)
         if not o.IconColor then
             onAccent(function(a) sq.BackgroundColor3 = a ic.ImageColor3 = contrast(a) end)
         end
-        -- 行に乗せると、アイコンがバネで少しだけ持ち上がる
-        local sqScale = new("UIScale", { Parent = sq })
-        local lift = spring(1, 26, 0.62)
-        r.MouseEnter:Connect(function() lift.t = 1.05 end)
-        r.MouseLeave:Connect(function() lift.t = 1 end)
-        onStep(function() sqScale.Scale = lift.x end)
         x = 50
     end
     local reserve = (opts.right or 0) + 10
@@ -761,6 +755,8 @@ function Container:CreateToggle(o)
         knob.Size = UDim2.fromOffset(w, 24)
         knob.Position = UDim2.new(0, 2 + (42 - w) * clamp01(k), 0.5, 0)
         sw.BackgroundColor3 = C.Raised:Lerp(accent(), clamp01(k))
+        -- ON の時は縁がうっすらアクセント色に光る
+        swStroke.Color = WHITE:Lerp(accent():Lerp(WHITE, 0.4), clamp01(k))
     end)
     if key then
         local chip = text({
@@ -851,6 +847,7 @@ function Container:CreateSlider(o)
     end
     local vs = spring((e.Value - min) / math.max(max - min, 1e-9), 22, 1)
     local hov = spring(0, 20, 0.9)
+    local kick = spring(0, 34, 0.45) -- 次の段へ吸い付いた時の、ごく小さなコツン
     local dragging
     hit.MouseEnter:Connect(function() hov.t = 1 end)
     hit.MouseLeave:Connect(function() if not dragging() then hov.t = 0 end end)
@@ -860,7 +857,7 @@ function Container:CreateSlider(o)
         trk.Size = UDim2.new(1, 0, 0, 4 + 3 * h)
         fill.Size = UDim2.fromScale(p, 1)
         thumb.Position = UDim2.fromScale(p, 0.5)
-        thumbScale.Scale = 0.8 + 0.3 * h
+        thumbScale.Scale = 0.8 + 0.3 * h + kick.x
         ba.t = (dragging and dragging()) and 1 or 0
         bubble.Visible = ba.x > 0.02
         if bubble.Visible then
@@ -877,6 +874,7 @@ function Container:CreateSlider(o)
         v = min + math.floor((v - min) / inc + 0.5) * inc
         v = math.clamp(tonumber(fmt(v)) or v, min, max)
         local changed = v ~= self.Value
+        if changed and steps <= 40 then kick.v = kick.v + 2.2 end
         self.Value = v
         vs.t = (v - min) / math.max(max - min, 1e-9)
         if not box:IsFocused() then box.Text = fmt(v) .. suffix end
@@ -2558,10 +2556,28 @@ function Window:CreateHome(o)
     local T = W:CreateTab({ Name = o.Name or "Home", Icon = o.Icon or "house", Desc = o.Desc or "session" })
 
     -- 上: 左に自分 (アバター・あいさつ・名前)、右に大きな時計と日付。iOS のロック画面のウィジェットのように左右で釣り合う
-    local hero = new("Frame", { Size = UDim2.new(1, 0, 0, 84), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, LayoutOrder = T:_next(), Parent = T.List })
+    local hero = new("Frame", { Size = UDim2.new(1, 0, 0, 92), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, LayoutOrder = T:_next(), Parent = T.List })
     corner(hero, 18)
-    gstroke(hero, 0.86, 0.35, 0.97)
-    local av = new("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 16, 0.5, 0), Size = UDim2.fromOffset(48, 48), BackgroundColor3 = C.Raised, Image = "", ZIndex = 2, Parent = hero })
+    gstroke(hero, 0.84, 0.3, 0.97)
+    -- ロゴは「カードの紋章」として: 大きく、アクセント色でうっすら、右下からカードの外へはみ出すように置く
+    --   (Apple Wallet のカードのように。角の丸みに沿って切り取るため CanvasGroup に入れる)
+    --   動きは 2 分で 1 回転するだけ。回転は 1px に縛られないので、なめらか
+    local art = new("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 1, Parent = hero })
+    corner(art, 18)
+    local wash = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = accent(), BorderSizePixel = 0, ZIndex = 1, Parent = art })
+    new("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.55, 1), NumberSequenceKeypoint.new(1, 0.86) }), Parent = wash })
+    local crest = new("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -46, 0.5, 22), Size = UDim2.fromOffset(150, 150),
+        BackgroundTransparency = 1, Image = W.Logo, ScaleType = Enum.ScaleType.Fit, ImageColor3 = accent(), ImageTransparency = 0.86, ZIndex = 2, Parent = art,
+    })
+    onAccent(function(a) wash.BackgroundColor3 = a crest.ImageColor3 = a end)
+    local crestStop = onStep(function() crest.Rotation = (os.clock() * 3) % 360 end)
+    -- 左上に小さく、くっきりしたロゴと名前 (どの UI か一目で分かる)
+    local tag = new("Frame", { Position = UDim2.fromOffset(16, 12), Size = UDim2.fromOffset(0, 18), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 3, Parent = hero })
+    new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tag })
+    local tagLogo = new("ImageLabel", { Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, Image = W.Logo, ScaleType = Enum.ScaleType.Fit, LayoutOrder = 1, ZIndex = 3, Parent = tag })
+    text({ Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = string.upper(W.Name), FontFace = F.Heavy, TextSize = 10, TextColor3 = C.Sub, TextTruncate = Enum.TextTruncate.None, LayoutOrder = 2, ZIndex = 3, Parent = tag })
+    local _ = tagLogo    local av = new("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 16, 0, 56), Size = UDim2.fromOffset(42, 42), BackgroundColor3 = C.Raised, Image = "", ZIndex = 2, Parent = hero })
     corner(av, UDim.new(1, 0))
     stroke(av, WHITE, 0.85, 1)
     task.spawn(function()
@@ -2569,13 +2585,13 @@ function Window:CreateHome(o)
         if ok and img then av.Image = img end
     end)
     -- オンラインの小さな点 (アバターの右下)
-    local live = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 16 + 42, 0.5, 17), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = Lib.Colors.green, ZIndex = 3, Parent = hero })
+    local live = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 16 + 37, 0, 56 + 15), Size = UDim2.fromOffset(11, 11), BackgroundColor3 = Lib.Colors.green, ZIndex = 3, Parent = hero })
     corner(live, UDim.new(1, 0))
     stroke(live, rgb(24, 24, 28), 0, 2.5)
-    local greet = text({ Position = UDim2.fromOffset(78, 20), Size = UDim2.new(0.6, -78, 0, 15), Text = "", TextSize = 12, TextColor3 = C.Muted, ZIndex = 2, Parent = hero })
-    local name = text({ Position = UDim2.fromOffset(78, 35), Size = UDim2.new(0.6, -78, 0, 24), Text = LocalPlayer.DisplayName, FontFace = F.Heavy, TextSize = 19, ZIndex = 2, Parent = hero })
-    local clock = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 17), Size = UDim2.new(0.4, 0, 0, 32), Text = "", FontFace = F.Regular, TextSize = 30, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
-    local date = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 50), Size = UDim2.new(0.4, 0, 0, 14), Text = "", TextSize = 11, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
+    local greet = text({ Position = UDim2.fromOffset(70, 39), Size = UDim2.new(0.6, -70, 0, 14), Text = "", TextSize = 12, TextColor3 = C.Muted, ZIndex = 2, Parent = hero })
+    local name = text({ Position = UDim2.fromOffset(70, 53), Size = UDim2.new(0.6, -70, 0, 22), Text = LocalPlayer.DisplayName, FontFace = F.Heavy, TextSize = 19, ZIndex = 2, Parent = hero })
+    local clock = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 26), Size = UDim2.new(0.4, 0, 0, 32), Text = "", FontFace = F.Regular, TextSize = 30, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
+    local date = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 59), Size = UDim2.new(0.4, 0, 0, 14), Text = "", TextSize = 11, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
     local function paintHero()
         greet.Text = o.Welcome and tostring(o.Welcome) or greeting()
         clock.Text = os.date("%H:%M")
@@ -2628,6 +2644,7 @@ function Window:CreateHome(o)
             task.wait(0.5)
         end
         stop()
+        crestStop()
     end)
     return T
 end
