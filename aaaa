@@ -87,6 +87,13 @@ local function gstroke(o, tr, a, b)
     new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(a or 0.45, b or 0.95), Parent = st })
     return st
 end
+-- くぼみ: 入力欄・キー・ステッパーなど、右側の部品の共通の見た目 (暗く沈んで、縁がかすか)
+local function well(o, r)
+    o.BackgroundColor3 = BLACK
+    o.BackgroundTransparency = 0.6
+    corner(o, r or 9)
+    return stroke(o, WHITE, 0.9, 1)
+end
 local function text(props)
     local base = {
         BackgroundTransparency = 1, FontFace = F.Medium, TextColor3 = C.Text, TextSize = 13,
@@ -622,7 +629,7 @@ local function baseRow(cont, o, opts)
         -- 行に乗せると、アイコンがバネで少しだけ持ち上がる
         local sqScale = new("UIScale", { Parent = sq })
         local lift = spring(1, 26, 0.62)
-        r.MouseEnter:Connect(function() lift.t = 1.08 end)
+        r.MouseEnter:Connect(function() lift.t = 1.05 end)
         r.MouseLeave:Connect(function() lift.t = 1 end)
         onStep(function() sqScale.Scale = lift.x end)
         x = 50
@@ -732,16 +739,16 @@ function Container:CreateToggle(o)
     o = o or {}
     local W = self.Window
     local key = o.Keybind and keyName(o.Keybind)
-    local R = baseRow(self, o, { right = key and 96 or 56 })
+    local R = baseRow(self, o, { right = key and 108 or 60 })
     local e = newElement(self, o, R, "Toggle")
     e.Value = (o.CurrentValue or o.Default) == true
     local sw = new("Frame", {
-        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(44, 26),
+        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(46, 28),
         BackgroundColor3 = C.Raised, ZIndex = 2, Parent = R.row,
     })
     corner(sw, UDim.new(1, 0))
     local swStroke = stroke(sw, WHITE, 0.88, 1)
-    local knob = new("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = WHITE, ZIndex = 3, Parent = sw })
+    local knob = new("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(24, 24), BackgroundColor3 = WHITE, ZIndex = 3, Parent = sw })
     corner(knob, UDim.new(1, 0))
     new("UIGradient", { Rotation = 90, Color = ColorSequence.new(WHITE, rgb(225, 225, 232)), Parent = knob })
     stroke(knob, BLACK, 0.85, 1)
@@ -750,18 +757,19 @@ function Container:CreateToggle(o)
     onStep(function()
         local k = x.x
         local stretch = math.clamp(math.abs(x.v) * 0.045, 0, 7) + press.x * 5
-        local w = 22 + stretch
-        knob.Size = UDim2.fromOffset(w, 22)
-        knob.Position = UDim2.new(0, 2 + (40 - w) * clamp01(k), 0.5, 0)
+        local w = 24 + stretch
+        knob.Size = UDim2.fromOffset(w, 24)
+        knob.Position = UDim2.new(0, 2 + (42 - w) * clamp01(k), 0.5, 0)
         sw.BackgroundColor3 = C.Raised:Lerp(accent(), clamp01(k))
     end)
     if key then
         local chip = text({
-            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -64, 0, R.H0 / 2), Size = UDim2.fromOffset(32, 18),
-            Text = keyLabel(key), FontFace = F.Bold, TextSize = 10, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Center,
-            BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 2, Parent = R.row,
+            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -68, 0, R.H0 / 2), Size = UDim2.fromOffset(0, 22), AutomaticSize = Enum.AutomaticSize.X,
+            Text = keyLabel(key), FontFace = F.Bold, TextSize = 11, TextColor3 = C.Sub, TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.None, ZIndex = 2, Parent = R.row,
         })
-        corner(chip, 6)
+        well(chip, 7)
+        new("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = chip })
+        new("UISizeConstraint", { MinSize = Vector2.new(24, 22), Parent = chip })
         e._chip = chip
         if o.ShowInList ~= false then
             table.insert(W.Binds, { name = tostring(o.Name or "toggle"), row = R.row, key = function() return key end, active = function() return e.Value end })
@@ -1104,14 +1112,13 @@ function Container:CreateKeybind(o)
     local e = newElement(self, o, R, "Keybind")
     e.Value = keyName(o.CurrentKeybind or o.Default or "None")
     local chip = new("TextButton", {
-        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0, R.H0 / 2), Size = UDim2.fromOffset(0, 26),
-        AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = WHITE, BackgroundTransparency = 0.92, Text = keyLabel(e.Value),
-        FontFace = F.Bold, TextSize = 12, TextColor3 = C.Text, AutoButtonColor = false, ZIndex = 4, Parent = R.row,
+        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(0, 28),
+        AutomaticSize = Enum.AutomaticSize.X, Text = keyLabel(e.Value),
+        FontFace = F.Bold, TextSize = 12, TextColor3 = C.Sub, AutoButtonColor = false, ZIndex = 4, Parent = R.row,
     })
-    corner(chip, 8)
-    local cst = gstroke(chip, 0.8, 0.3, 0.9)
-    new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = chip })
-    new("UISizeConstraint", { MinSize = Vector2.new(44, 26), Parent = chip })
+    local cst = well(chip, 9)
+    new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = chip })
+    new("UISizeConstraint", { MinSize = Vector2.new(48, 28), Parent = chip })
     bounce(chip, nil, 1.05, 30, 0.86, 0.92)
     local listening = false
     local function setListening(on)
@@ -1119,8 +1126,8 @@ function Container:CreateKeybind(o)
         -- 解除は 1 フレーム後 (登録したキーで、同じ瞬間に UI の表示切替などが動かないように)
         if on then Lib._listening = true else task.defer(function() if not listening then Lib._listening = false end end) end
         chip.Text = on and "···" or keyLabel(e.Value)
-        tween(chip, { BackgroundTransparency = on and 0.8 or 0.92 }, 0.15)
-        tween(cst, { Color = on and accent() or WHITE, Transparency = on and 0.2 or 0.8 }, 0.15)
+        tween(chip, { TextColor3 = on and C.Text or C.Sub }, 0.15)
+        tween(cst, { Color = on and accent() or WHITE, Transparency = on and 0.15 or 0.9 }, 0.15)
     end
     chip.MouseButton1Click:Connect(function() if not e.Locked then setListening(not listening) end end)
     function e:Set(k)
@@ -1181,11 +1188,11 @@ function Container:CreateColorPicker(o)
     -- iOS の色のボタン: 虹色の輪の中に、今の色の丸
     local keys = {}
     for i = 0, 6 do keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i / 6, 0.75, 1)) end
-    local well = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, H0 / 2), Size = UDim2.fromOffset(22, 22), BackgroundTransparency = 1, ZIndex = 2, Parent = R.row })
+    local well = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0, H0 / 2), Size = UDim2.fromOffset(24, 24), BackgroundTransparency = 1, ZIndex = 2, Parent = R.row })
     corner(well, UDim.new(1, 0))
     local ring = stroke(well, WHITE, 0, 2)
     local ringGrad = new("UIGradient", { Color = ColorSequence.new(keys), Parent = ring })
-    local sw = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(14, 14), BackgroundColor3 = c0, ZIndex = 3, Parent = well })
+    local sw = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(16, 16), BackgroundColor3 = c0, ZIndex = 3, Parent = well })
     corner(sw, UDim.new(1, 0))
     local wellScale = new("UIScale", { Parent = well })
     local hit = new("TextButton", { Size = UDim2.new(1, 0, 0, H0), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = R.row })
@@ -1274,7 +1281,6 @@ function Container:CreateColorPicker(o)
         local p = clamp01((hs.x - H0) / (FULL - H0))
         body.Visible = p > 0.01
         body.GroupTransparency = 1 - p * p
-        ringGrad.Rotation = (os.clock() * (open and 90 or 25)) % 360 -- 輪はゆっくり回る (開いている間は少し速く)
     end)
     hit.MouseButton1Click:Connect(function()
         open = not open
@@ -1337,32 +1343,37 @@ end
 -- ---- ステッパー (- 値 +。押しっぱなしで連続) ----
 function Container:CreateStepper(o)
     o = o or {}
-    local R = baseRow(self, o, { right = 122 })
+    local R = baseRow(self, o, { right = 156 })
     local e = newElement(self, o, R, "Stepper")
     local min, max, step = o.Min or 0, o.Max or 100, o.Step or o.Increment or 1
     local dec = step < 1 and math.max(0, math.ceil(-math.log10(step) - 1e-9)) or 0
     local suffix = o.Suffix and tostring(o.Suffix) or ""
     e.Value = math.clamp(o.CurrentValue or o.Default or min, min, max)
+
+    -- iOS と同じ: − と + が 1 つのカプセルに入り、真ん中に細い線。値はその左
+    local cap = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0, R.H0 / 2), Size = UDim2.fromOffset(92, 28), ZIndex = 3, Parent = R.row })
+    well(cap, UDim.new(1, 0))
+    new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(1, 14), BackgroundColor3 = WHITE, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 4, Parent = cap })
+
     -- 数字は時計のように回る: 増える時は下から、減る時は上から入れ替わる
-    local box = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -42, 0, R.H0 / 2), Size = UDim2.fromOffset(46, 22), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = R.row })
-    local cur = text({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = F.Bold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3, Parent = box })
-    local old = text({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = F.Bold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, TextTransparency = 1, ZIndex = 3, Parent = box })
+    local box = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -112, 0, R.H0 / 2), Size = UDim2.fromOffset(52, 22), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3, Parent = R.row })
+    local cur = text({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = F.Bold, TextSize = 14, TextColor3 = C.Sub, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 3, Parent = box })
+    local old = text({ Size = UDim2.fromScale(1, 1), Text = "", FontFace = F.Bold, TextSize = 14, TextColor3 = C.Sub, TextXAlignment = Enum.TextXAlignment.Right, TextTransparency = 1, ZIndex = 3, Parent = box })
     local roll, dir = spring(1, 20, 0.86), 1
     onStep(function()
         local k = clamp01(roll.x)
-        cur.Position = UDim2.fromOffset(0, dir * 14 * (1 - roll.x))
+        cur.Position = UDim2.fromOffset(0, dir * 12 * (1 - roll.x))
         cur.TextTransparency = 1 - k
-        old.Position = UDim2.fromOffset(0, -dir * 14 * roll.x)
+        old.Position = UDim2.fromOffset(0, -dir * 12 * roll.x)
         old.TextTransparency = k
     end)
     local function fmtv(v) return string.format("%." .. dec .. "f", v) .. suffix end
     local btns = {}
-    -- 端まで来たら、その向きのボタンは薄くなる
+    -- 端まで来たら、その向きは薄くなる
     local function paintLimits()
         for _, b in ipairs(btns) do
             local off = (b.d < 0 and e.Value <= min) or (b.d > 0 and e.Value >= max)
-            tween(b.ic, { ImageTransparency = off and 0.7 or 0 }, 0.2)
-            tween(b.btn, { BackgroundTransparency = off and 0.965 or 0.92 }, 0.2)
+            tween(b.ic, { ImageTransparency = off and 0.75 or 0 }, 0.2)
         end
     end
     function e:Set(v, silent)
@@ -1377,20 +1388,25 @@ function Container:CreateStepper(o)
         paintLimits()
         if not silent then self:_fire(v) end
     end
-    for _, d in ipairs({ { "minus", -step, -90 }, { "plus", step, -10 } }) do
+    for i, d in ipairs({ { "minus", -step }, { "plus", step } }) do
         local b = new("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, d[3], 0, R.H0 / 2), Size = UDim2.fromOffset(30, 26),
-            BackgroundColor3 = WHITE, BackgroundTransparency = 0.92, Text = "", AutoButtonColor = false, ZIndex = 4, Parent = R.row,
+            Position = UDim2.fromScale((i - 1) / 2, 0), Size = UDim2.fromScale(0.5, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
+            Text = "", AutoButtonColor = false, ZIndex = 4, Parent = cap,
         })
-        corner(b, 8)
-        gstroke(b, 0.8, 0.3, 0.9)
+        corner(b, UDim.new(1, 0))
         local ic = new("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(14, 14), BackgroundTransparency = 1, ImageColor3 = C.Text, ZIndex = 5, Parent = b })
         setIcon(ic, d[1])
-        bounce(b, nil, 1.06, 30, 0.86, 0.9)
+        local icScale = new("UIScale", { Parent = ic })
+        local press = spring(1, 30, 0.7)
+        onStep(function() icScale.Scale = press.x end)
         table.insert(btns, { btn = b, ic = ic, d = d[2] })
+        b.MouseEnter:Connect(function() tween(b, { BackgroundTransparency = 0.95 }, 0.12) end)
         local held, tok = false, 0
         b.MouseButton1Down:Connect(function()
             if e.Locked then return end
+            PressedAt = os.clock()
+            press.t = 0.82
+            b.BackgroundTransparency = 0.88
             held = true
             tok += 1
             local my = tok
@@ -1399,8 +1415,9 @@ function Container:CreateStepper(o)
                 while held and tok == my do e:Set(e.Value + d[2]) task.wait(0.06) end
             end)
         end)
-        b.MouseButton1Up:Connect(function() held = false end)
-        b.MouseLeave:Connect(function() held = false end)
+        local function release() held = false press.t = 1 tween(b, { BackgroundTransparency = 1 }, 0.25) end
+        b.MouseButton1Up:Connect(release)
+        b.MouseLeave:Connect(release)
     end
     cur.Text = fmtv(e.Value)
     paintLimits()
@@ -2540,67 +2557,47 @@ function Window:CreateHome(o)
     local W = self
     local T = W:CreateTab({ Name = o.Name or "Home", Icon = o.Icon or "house", Desc = o.Desc or "session" })
 
-    -- あいさつのカード: 左にアクセント色がうっすら差し、右に大きくロゴ
-    local card = new("Frame", { Size = UDim2.new(1, 0, 0, 80), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, ClipsDescendants = true, LayoutOrder = T:_next(), Parent = T.List })
-    corner(card, 18)
-    gstroke(card, 0.84, 0.3, 0.95)
-    local wash = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = accent(), BorderSizePixel = 0, Parent = card })
-    corner(wash, 18)
-    new("UIGradient", { Transparency = NumberSequence.new(0.8, 1), Parent = wash })
-    onAccent(function(a) wash.BackgroundColor3 = a end)
-    local av = new("ImageLabel", { Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(48, 48), BackgroundColor3 = C.Raised, Image = "", ZIndex = 2, Parent = card })
+    -- 上: 左に自分 (アバター・あいさつ・名前)、右に大きな時計と日付。iOS のロック画面のウィジェットのように左右で釣り合う
+    local hero = new("Frame", { Size = UDim2.new(1, 0, 0, 84), BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, LayoutOrder = T:_next(), Parent = T.List })
+    corner(hero, 18)
+    gstroke(hero, 0.86, 0.35, 0.97)
+    local av = new("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 16, 0.5, 0), Size = UDim2.fromOffset(48, 48), BackgroundColor3 = C.Raised, Image = "", ZIndex = 2, Parent = hero })
     corner(av, UDim.new(1, 0))
-    local ring = stroke(av, accent(), 0.1, 2)
-    onAccent(function(a) ring.Color = a end)
+    stroke(av, WHITE, 0.85, 1)
     task.spawn(function()
         local ok, img = pcall(Players.GetUserThumbnailAsync, Players, LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
         if ok and img then av.Image = img end
     end)
-    local hello = text({ Position = UDim2.fromOffset(78, 20), Size = UDim2.new(1, -150, 0, 22), Text = "", FontFace = F.Heavy, TextSize = 17, ZIndex = 2, Parent = card })
-    local date = text({ Position = UDim2.fromOffset(78, 43), Size = UDim2.new(1, -150, 0, 16), Text = "", TextSize = 12, TextColor3 = C.Muted, ZIndex = 2, Parent = card })
-    -- ロゴ: 位置や角度は動かさない (小さく動かすと 1px ずつ飛んで紙芝居になる)
-    --   代わりに、透明度とグラデーションだけで動かす (これは 1px に縛られないので、なめらか)
-    --   ・数秒ごとに光の筋がすっと横切る  ・アクセント色の輪がゆっくり呼吸する  ・乗せるとバネでふわっと大きく
-    local logo = new("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -18, 0.5, 0), Size = UDim2.fromOffset(46, 46), BackgroundColor3 = rgb(4, 4, 6), ZIndex = 2, Parent = card })
-    corner(logo, 13)
-    logoFill(logo, W.Logo)
-    local glow = stroke(logo, accent(), 0.5, 1.5)
-    onAccent(function(a) glow.Color = a end)
-    local shine = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 4, Parent = logo })
-    corner(shine, 13)
-    local shineGrad = new("UIGradient", {
-        Rotation = 20,
-        Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 1), NumberSequenceKeypoint.new(0.5, 0.72),
-            NumberSequenceKeypoint.new(0.6, 1), NumberSequenceKeypoint.new(1, 1),
-        }),
-        Offset = Vector2.new(-1, 0), Parent = shine,
-    })
-    local logoScale = new("UIScale", { Parent = logo })
-    local logoHover = spring(1, 22, 0.7)
-    logo.MouseEnter:Connect(function() logoHover.t = 1.08 end)
-    logo.MouseLeave:Connect(function() logoHover.t = 1 end)
-    local function paintHello()
-        hello.Text = (o.Welcome or (greeting() .. ", ")) .. LocalPlayer.DisplayName
-        date.Text = string.lower(os.date("%A, %d %B"))
+    -- オンラインの小さな点 (アバターの右下)
+    local live = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 16 + 42, 0.5, 17), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = Lib.Colors.green, ZIndex = 3, Parent = hero })
+    corner(live, UDim.new(1, 0))
+    stroke(live, rgb(24, 24, 28), 0, 2.5)
+    local greet = text({ Position = UDim2.fromOffset(78, 20), Size = UDim2.new(0.6, -78, 0, 15), Text = "", TextSize = 12, TextColor3 = C.Muted, ZIndex = 2, Parent = hero })
+    local name = text({ Position = UDim2.fromOffset(78, 35), Size = UDim2.new(0.6, -78, 0, 24), Text = LocalPlayer.DisplayName, FontFace = F.Heavy, TextSize = 19, ZIndex = 2, Parent = hero })
+    local clock = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 17), Size = UDim2.new(0.4, 0, 0, 32), Text = "", FontFace = F.Regular, TextSize = 30, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
+    local date = text({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -18, 0, 50), Size = UDim2.new(0.4, 0, 0, 14), Text = "", TextSize = 11, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Parent = hero })
+    local function paintHero()
+        greet.Text = o.Welcome and tostring(o.Welcome) or greeting()
+        clock.Text = os.date("%H:%M")
+        date.Text = string.lower(os.date("%a, %d %b"))
     end
-    paintHello()
+    paintHero()
 
-    T:CreateSection({ Name = o.StatsTitle or "session", Icon = "activity" })
+    -- 下: 今のセッションのタイル (小さなアイコンと名前、その下に大きな値)
+    T:CreateSection({ Name = o.StatsTitle or "session" })
     local grid = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = T:_next(), Parent = T.List })
-    new("UIGridLayout", { CellSize = UDim2.new(0.5, -4, 0, 58), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid })
+    new("UIGridLayout", { CellSize = UDim2.new(0.5, -4, 0, 64), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid })
     local cells = {}
-    for i, key in ipairs(o.Stats or { "fps", "ping", "players", "time", "executor", "uptime" }) do
+    for i, key in ipairs(o.Stats or { "fps", "ping", "players", "uptime", "executor", "memory" }) do
         local info = HOME_STATS[key] or { tostring(key), "circle" }
         local c = new("Frame", { BackgroundColor3 = WHITE, BackgroundTransparency = 0.955, LayoutOrder = i, Parent = grid })
-        corner(c, 15)
+        corner(c, 16)
         gstroke(c, 0.86, 0.4, 0.97)
-        local ic = new("ImageLabel", { Position = UDim2.fromOffset(14, 20), Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, ImageColor3 = C.Sub, Parent = c })
+        local ic = new("ImageLabel", { Position = UDim2.fromOffset(14, 13), Size = UDim2.fromOffset(13, 13), BackgroundTransparency = 1, ImageColor3 = accent(), Parent = c })
         setIcon(ic, info[2])
-        text({ Position = UDim2.fromOffset(44, 12), Size = UDim2.new(1, -52, 0, 12), Text = string.upper(info[1]), FontFace = F.Heavy, TextSize = 9, TextColor3 = C.Muted, Parent = c })
-        local v = text({ Position = UDim2.fromOffset(44, 26), Size = UDim2.new(1, -52, 0, 20), Text = "—", FontFace = F.Bold, TextSize = 16, Parent = c })
-        c.MouseEnter:Connect(function() tween(c, { BackgroundTransparency = 0.935 }, 0.15) tween(ic, { ImageColor3 = accent() }, 0.15) end)
-        c.MouseLeave:Connect(function() tween(c, { BackgroundTransparency = 0.955 }, 0.25) tween(ic, { ImageColor3 = C.Sub }, 0.25) end)
+        onAccent(function(a) ic.ImageColor3 = a end)
+        text({ Position = UDim2.fromOffset(32, 12), Size = UDim2.new(1, -44, 0, 15), Text = info[1], FontFace = F.Medium, TextSize = 12, TextColor3 = C.Muted, Parent = c })
+        local v = text({ Position = UDim2.fromOffset(14, 31), Size = UDim2.new(1, -28, 0, 22), Text = "—", FontFace = F.Bold, TextSize = 18, Parent = c })
         cells[key] = v
     end
 
@@ -2609,18 +2606,12 @@ function Window:CreateHome(o)
         frames += 1
         acc += dt
         if acc >= 0.5 then fps = math.floor(frames / acc + 0.5) frames, acc = 0, 0 end
-        local t = os.clock()
-        local p = math.min((t % 5) / 1.2, 1)               -- 5 秒ごとに 1.2 秒かけて横切る
-        p = p * p * (3 - 2 * p)
-        shineGrad.Offset = Vector2.new(-1 + 2 * p, 0)
-        glow.Transparency = 0.45 + 0.35 * (0.5 + 0.5 * math.sin(t * 1.3))
-        logoScale.Scale = logoHover.x
     end)
     local executor = "unknown"
     pcall(function() if type(identifyexecutor) == "function" then executor = (identifyexecutor()) end end)
     local function set(key, val) if cells[key] then cells[key].Text = val end end
     task.spawn(function()
-        while W.Alive and card.Parent do
+        while W.Alive and hero.Parent do
             set("fps", tostring(fps))
             local ok, p = pcall(function() return LocalPlayer:GetNetworkPing() * 1000 end)
             set("ping", (ok and math.floor(p + 0.5) or 0) .. " ms")
@@ -2631,8 +2622,9 @@ function Window:CreateHome(o)
             set("uptime", up >= 3600 and string.format("%d:%02d:%02d", math.floor(up / 3600), math.floor(up % 3600 / 60), up % 60) or string.format("%d:%02d", math.floor(up / 60), up % 60))
             local okm, mem = pcall(function() return game:GetService("Stats"):GetTotalMemoryUsageMb() end)
             set("memory", okm and (math.floor(mem) .. " MB") or "—")
-            set("server", string.sub(tostring(game.JobId), 1, 8) ~= "" and string.sub(tostring(game.JobId), 1, 8) or "studio")
-            paintHello()
+            local job = string.sub(tostring(game.JobId), 1, 8)
+            set("server", job ~= "" and job or "studio")
+            paintHero()
             task.wait(0.5)
         end
         stop()
